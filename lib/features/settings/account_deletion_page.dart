@@ -56,15 +56,25 @@ class _AccountDeletionPageState extends State<AccountDeletionPage> {
   /// refused for admins.
   bool canSelfDelete = true;
 
-  /// The account's linked sign-ins (#382), for the notes that name them.
+  /// The account's linked sign-ins (#382), for the notes that name them:
+  /// the same list the settings group shows, also when it answers later.
   List<LinkedSignIn> get linked =>
       linkedSignInsOf(widget.store.client?.auth.currentUser);
 
   @override
   void initState() {
     super.initState();
+    refreshedIdentities.addListener(_identitiesChanged);
     unawaited(_loadStatus());
   }
+
+  @override
+  void dispose() {
+    refreshedIdentities.removeListener(_identitiesChanged);
+    super.dispose();
+  }
+
+  void _identitiesChanged() => setState(() {});
 
   Future<void> _loadStatus() async {
     final AccountDeletionState state;

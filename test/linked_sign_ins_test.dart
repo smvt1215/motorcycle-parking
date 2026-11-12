@@ -123,6 +123,10 @@ class _Fixture {
     (provider: provider, email: email);
 
 void main() {
+  // Shared by the settings group and the deletion page; each test starts
+  // with nothing fetched.
+  setUp(() => refreshedIdentities.value = null);
+
   group('domain', () {
     test('只連 Google：一列，完整電子郵件', () {
       final rows = linkedSignIns([_row('google', 'a@gmail.com')]);
@@ -442,6 +446,11 @@ void main() {
       expect(googleRow, findsOneWidget);
       expect(appleRow, findsOneWidget);
       expect(find.text('azhe@icloud.com'), findsOneWidget);
+      // The deletion page reads the same refreshed list (Codex P2).
+      expect(
+        linkedSignInsOf(fixture.client.auth.currentUser).map((r) => r.provider),
+        [SignInProvider.google, SignInProvider.apple],
+      );
     });
 
     testWidgets('更新失敗或回傳空清單：保留原本的清單', (tester) async {
@@ -565,6 +574,64 @@ void main() {
       final note = find.byKey(const ValueKey('deletion-reauth-note'));
       await scrollTo(tester, note);
       expect(tester.widget<Text>(note).data, deletionReauthNote);
+    });
+
+    testWidgets('設定頁更新到別的裝置連結的 Apple：刪除頁用同一份清單（Codex P2）', (tester) async {
+      // The session only knows Google; the settings group's refresh found
+      // Apple too, before or after the page opened.
+      final me = AccountIdentity(
+        id: 'rider',
+        email: 'azhe.rider@gmail.com',
+        name: '阿哲',
+        apple: true,
+        signedInAt: DateTime.now().toUtc(),
+        appleToken: 'apple-rt',
+        appleTokenHint: 'refresh_token',
+      );
+      await openDeletion(tester, identities: [_google], me: me);
+      await scrollTo(
+        tester,
+        find.text(deletionDeletedNote(googleAndApple: false)),
+      );
+      refreshedIdentities.value = [
+        for (final i in [_google, _apple]) UserIdentity.fromMap(i),
+      ];
+      await tester.pumpAndSettle();
+      await scrollTo(
+        tester,
+        find.text(deletionDeletedNote(googleAndApple: true)),
+      );
+      final note = find.byKey(const ValueKey('deletion-reauth-note'));
+      await scrollTo(tester, note);
+      expect(
+        tester.widget<Text>(note).data,
+        deletionReauthNoteFor(apple: true, google: true),
+      );
+      await tester.tap(find.byKey(const ValueKey('deletion-submit')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(deletionConfirmAction).last);
+      await tester.pumpAndSettle();
+      // The refreshed Apple identity's address, not the account's.
+      expect(find.text('a••••@icloud.com・Apple'), findsOneWidget);
+    });
+
+    testWidgets('別人的更新清單不採用', (tester) async {
+      refreshedIdentities.value = [
+        UserIdentity.fromMap({
+          ..._apple,
+          'user_id': '20000000-0000-4000-8000-000000000382',
+        }),
+      ];
+      await openDeletion(
+        tester,
+        identities: [_google],
+        me: google(signedInAt: DateTime.now().toUtc()),
+      );
+      await scrollTo(
+        tester,
+        find.text(deletionDeletedNote(googleAndApple: false)),
+      );
+      expect(find.textContaining(deletionBothLinkedNote), findsNothing);
     });
 
     testWidgets('只連 Apple：按鈕說明沒有 Google 那句', (tester) async {

@@ -6,15 +6,21 @@ import '../../domain/account_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../auth/brand_sign_in_button.dart';
 
-/// The signed-in account's linked sign-ins (#382), from `identities`;
-/// empty signed out or anonymous.
-List<LinkedSignIn> linkedSignInsOf(
-  User? user, [
-  List<UserIdentity>? identities,
-]) {
+/// The server's latest identities (#382), asked once when the settings group
+/// opens; `currentUser.identities` does not change with that answer, so the
+/// deletion page reads this too and names the same sign-ins as the list.
+final refreshedIdentities = ValueNotifier<List<UserIdentity>?>(null);
+
+/// The signed-in account's linked sign-ins (#382), from
+/// [refreshedIdentities] when they are [user]'s, else the session's
+/// `identities`; empty signed out or anonymous.
+List<LinkedSignIn> linkedSignInsOf(User? user) {
   if (user == null || user.isAnonymous) return const [];
+  final fresh = refreshedIdentities.value;
+  // A list fetched for someone else (signed out and in again) is dropped.
+  final mine = fresh?.every((i) => i.userId == user.id) ?? false;
   return linkedSignIns([
-    for (final identity in identities ?? user.identities ?? const [])
+    for (final identity in (mine ? fresh : null) ?? user.identities ?? const [])
       (
         provider: identity.provider,
         email: switch (identity.identityData?['email']) {
@@ -42,31 +48,33 @@ class LinkedSignInsGroup extends StatefulWidget {
 }
 
 class _LinkedSignInsGroupState extends State<LinkedSignInsGroup> {
-  List<UserIdentity>? fresh;
-
   @override
   void initState() {
     super.initState();
+    refreshedIdentities.addListener(_changed);
     unawaited(_refresh());
   }
+
+  @override
+  void dispose() {
+    refreshedIdentities.removeListener(_changed);
+    super.dispose();
+  }
+
+  void _changed() => setState(() {});
 
   Future<void> _refresh() async {
     try {
       final identities = await widget.client.auth.getUserIdentities();
-      if (mounted && identities.isNotEmpty) {
-        setState(() => fresh = identities);
-      }
+      if (identities.isNotEmpty) refreshedIdentities.value = identities;
     } catch (_) {
-      // Offline or signed out meanwhile: the session's own list stays.
+      // Offline or signed out meanwhile: the last list stays.
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final user = widget.client.auth.currentUser;
-    // A list fetched for someone else (signed out and in again) is dropped.
-    final mine = fresh?.every((i) => i.userId == user?.id) ?? false;
-    final rows = linkedSignInsOf(user, mine ? fresh : null);
+    final rows = linkedSignInsOf(widget.client.auth.currentUser);
     if (rows.isEmpty) return const SizedBox.shrink();
     final theme = Theme.of(context);
     final muted = theme.textTheme.bodySmall?.copyWith(
