@@ -3,6 +3,7 @@ import 'package:motorcycle_parking/data/account_suspended.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/parking_decision.dart';
+import 'package:motorcycle_parking/domain/precheck.dart';
 import 'package:motorcycle_parking/features/account/suspended_sheet.dart';
 import 'package:motorcycle_parking/features/auth/sign_in.dart';
 import 'package:motorcycle_parking/features/report/entry_drafts.dart';
@@ -184,6 +185,78 @@ void main() {
     await tester.tap(target);
     await tester.pumpAndSettle();
   }
+
+  group('entriesPrecheckCurrent（#399）', () {
+    const hourly = Rate(FeeMode.hourly, amount: 20, perMinutes: 60);
+    const segment = ParkingSegment(
+      id: 's1',
+      name: '北側',
+      condition: ParkingCondition(
+        charge: Charge.toll,
+        allow: ZoneAllow(scooter: true, heavy: true),
+      ),
+    );
+    const spot = ParkingSpot(
+      id: 'official:street',
+      name: '南京東路三段路邊機車格',
+      lat: 25.05,
+      lng: 121.54,
+      city: '臺北市',
+      spaceType: SpaceType.paidMotorcycle,
+      source: 'official',
+      fee: Fee(
+        scooter: hourly,
+        heavy: hourly,
+        car: Rate(FeeMode.notApplicable),
+      ),
+      segments: [segment],
+    );
+
+    test('帶點位的費率、條件與格位類型，與伺服器讀的一致', () {
+      final drafts = [EntryDraft.ofSegment(segment, spot: spot)];
+      final current = entriesPrecheckCurrent(EntryType.segment, spot, drafts);
+      expect(current['fee'], spot.fee!.toJson());
+      expect(current['space_type'], 'paidMotorcycle');
+      expect(current.containsKey('condition'), isFalse);
+      expect(current['parking_segments'], [segment.toJson()]);
+    });
+
+    test('沒寫 bay 的路段改免費：照點位條件重算 charge，不再有收費格提醒', () {
+      final drafts = [EntryDraft.ofSegment(segment, spot: spot)];
+      final body = {
+        'action': 'flag',
+        'source_id': spot.id,
+        'reason': '路段與格位：北側 費率',
+        'field': 'segments',
+        'proposed': {
+          'parking_segments': [
+            {
+              'id': 's1',
+              'fee': const Fee(
+                scooter: Rate(FeeMode.free),
+                heavy: Rate(FeeMode.free),
+                car: Rate(FeeMode.notApplicable),
+              ).toJson(),
+            },
+          ],
+        },
+      };
+      List<String> rules(Map<String, Object?> current) => [
+        for (final i in precheck(body, current: current)) i.rule,
+      ];
+      // Only the entries (the call before #431): the charge stays toll.
+      expect(
+        rules({
+          'parking_segments': [segment.toJson()],
+        }),
+        contains('charge_toll_free_rate'),
+      );
+      expect(
+        rules(entriesPrecheckCurrent(EntryType.segment, spot, drafts)),
+        isNot(contains('charge_toll_free_rate')),
+      );
+    });
+  });
 
   group('EntryDraft', () {
     test('C3 留空自動命名：側＋格位、沒有側只用格位、同名加序號', () {

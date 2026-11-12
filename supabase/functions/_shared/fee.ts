@@ -402,7 +402,7 @@ export function validFeePlans(
 }
 
 /** jsonb equality: the same values, object keys in any order. */
-function sameJson(a: unknown, b: unknown): boolean {
+export function sameJson(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) || Array.isArray(b)) {
     return Array.isArray(a) && Array.isArray(b) && a.length === b.length &&
       a.every((x, i) => sameJson(x, b[i]));
