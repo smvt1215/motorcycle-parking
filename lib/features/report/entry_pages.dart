@@ -157,11 +157,17 @@ class SuggestionSession extends ChangeNotifier {
   final _sent = <SuggestionItem>{};
   List<SuggestionItem> get sent => List.unmodifiable(_sent);
 
+  /// How many suggestions went, a row sent again counted each time; [sent]
+  /// lists each row once.
+  int get sends => _sends;
+  int _sends = 0;
+
   /// The open row's suggestion went.
   void markSent() {
     final item = editing;
     if (item == null) return;
     _sent.add(item);
+    _sends++;
     notifyListeners();
   }
 }

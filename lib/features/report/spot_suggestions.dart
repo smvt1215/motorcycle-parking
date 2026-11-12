@@ -394,16 +394,16 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
 
   final scroll = ScrollController();
 
-  /// How many rows the top of the list has confirmed.
+  /// How many sends the top of the list has confirmed. Every send counts,
+  /// a row sent again too, so each one brings the confirmation into view.
   int confirmed = 0;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final count =
-        SuggestionScope.maybeOf(context, listen: true)?.sent.length ?? 0;
-    if (count == confirmed) return;
-    confirmed = count;
+    final sends = SuggestionScope.maybeOf(context, listen: true)?.sends ?? 0;
+    if (sends == confirmed) return;
+    confirmed = sends;
     // Back from a row further down: the confirmation is at the top.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (scroll.hasClients) scroll.jumpTo(0);

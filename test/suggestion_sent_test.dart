@@ -356,6 +356,30 @@ void main() {
         expect(tester.takeException(), isNull);
       }, variant: TargetPlatformVariant({platform}));
 
+      testWidgets('從已送出的列再送一次，仍捲回最上面的確認區', (tester) async {
+        final store = await _open(tester, _lot, size: const Size(320, 640));
+        final list = find
+            .descendant(
+              of: find.byType(FormFlow),
+              matching: find.byType(Scrollable),
+            )
+            .first;
+        double offset() => tester.state<ScrollableState>(list).position.pixels;
+
+        await _sendZone(tester);
+        expect(offset(), 0);
+        expect(find.byType(SentBanner).hitTestable(), findsOneWidget);
+
+        // The same row again, from further down: the count stays, the
+        // confirmation still comes back into view.
+        await _sendZone(tester);
+        expect(store.sent, hasLength(2));
+        expect(find.text('「分區與格位」的建議已送出'), findsOneWidget);
+        expect(offset(), 0);
+        expect(find.byType(SentBanner).hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      }, variant: TargetPlatformVariant({platform}));
+
       testWidgets('按完成關閉後顯示一次提示條；沒有送出就關閉則不顯示', (tester) async {
         await _open(tester, _lot);
         await tester.tap(find.byKey(const ValueKey('form-header-leading')));
