@@ -949,6 +949,15 @@ class _MapPageState extends ConsumerState<MapPage> {
         onTap: () => openMapLegend(context, fromMap: true),
       ),
     );
+    Widget notice() => Material(
+      color: colors.surface,
+      elevation: 2,
+      borderRadius: BorderRadius.circular(16),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        child: Text(store.mapNotice!, key: const ValueKey('map-notice')),
+      ),
+    );
     Widget errorCard() => Material(
       color: colors.errorContainer,
       borderRadius: BorderRadius.circular(16),
@@ -1241,42 +1250,36 @@ class _MapPageState extends ConsumerState<MapPage> {
                 right: 16,
                 child: legend,
               ),
-              if (store.error != null)
+              // One column over the map, so the two never overlap, clear
+              // of the legend button when it sits under the filters.
+              if (store.error != null || store.mapNotice != null)
                 Positioned(
                   top: rowBottom + 12,
                   left: mapLeft,
                   right: legendBeside ? 16 : 16 + legendSize + 12,
-                  child: errorCard(),
-                ),
-            ],
-            if (store.mapNotice != null)
-              Positioned(
-                top: tablet
-                    ? rowBottom + 12
-                    : MediaQuery.paddingOf(context).top +
-                          searchHeight +
-                          filterHeight +
-                          22,
-                // Clear of the legend button on the trailing edge.
-                left: tablet ? mapLeft : 68,
-                right: 68,
-                child: Center(
-                  child: Material(
-                    color: colors.surface,
-                    elevation: 2,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      child: Text(
-                        store.mapNotice!,
-                        key: const ValueKey('map-notice'),
-                      ),
-                    ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      if (store.error != null) errorCard(),
+                      if (store.error != null && store.mapNotice != null)
+                        const SizedBox(height: 8),
+                      if (store.mapNotice != null) Center(child: notice()),
+                    ],
                   ),
                 ),
+            ],
+            if (!tablet && store.mapNotice != null)
+              Positioned(
+                top:
+                    MediaQuery.paddingOf(context).top +
+                    searchHeight +
+                    filterHeight +
+                    22,
+                // Clear of the legend button on the trailing edge.
+                left: 68,
+                right: 68,
+                child: Center(child: notice()),
               ),
             if (liveFilter != AvailabilityFilter.off &&
                 spots.isEmpty &&

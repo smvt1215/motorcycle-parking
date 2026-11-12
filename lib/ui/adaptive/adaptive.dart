@@ -330,43 +330,48 @@ class AdaptiveScaffold extends StatelessWidget {
           ? _PanelTabBar(bar: bar)
           : bar,
     );
-    if (!rail) return scaffold;
+    // One shape with or without the rail: the page keeps its place in the
+    // tree, and with it the map's open spot, search and filters, when the
+    // window crosses the tablet width (split screen, a foldable).
     return ColoredBox(
-      color: colors.surfaceContainer,
+      color: rail ? colors.surfaceContainer : Colors.transparent,
       child: Row(
         children: [
-          SafeArea(
-            right: false,
-            child: M3ETheme(
-              data: M3ETheme.of(context).copyWith(
-                navigationRailTheme: M3ETheme.of(context).navigationRailTheme
-                    .copyWith(collapsedWidth: tabletRailWidth),
-              ),
-              child: M3ENavigationRail(
-                key: const ValueKey('tablet-rail'),
-                type: M3ENavigationRailType.alwaysCollapse,
-                background: colors.surfaceContainer,
-                selectedIndex: selected,
-                onDestinationSelected: select,
-                sections: [
-                  M3ENavigationRailSection(
-                    destinations: [
-                      for (var i = 0; i < 3; i++)
-                        M3ENavigationRailDestination(
-                          icon: Icon(icons[i]),
-                          label: labels[i],
-                        ),
-                    ],
-                  ),
-                ],
+          if (rail)
+            SafeArea(
+              key: const ValueKey('tablet-rail-area'),
+              right: false,
+              child: M3ETheme(
+                data: M3ETheme.of(context).copyWith(
+                  navigationRailTheme: M3ETheme.of(context).navigationRailTheme
+                      .copyWith(collapsedWidth: tabletRailWidth),
+                ),
+                child: M3ENavigationRail(
+                  key: const ValueKey('tablet-rail'),
+                  type: M3ENavigationRailType.alwaysCollapse,
+                  background: colors.surfaceContainer,
+                  selectedIndex: selected,
+                  onDestinationSelected: select,
+                  sections: [
+                    M3ENavigationRailSection(
+                      destinations: [
+                        for (var i = 0; i < 3; i++)
+                          M3ENavigationRailDestination(
+                            icon: Icon(icons[i]),
+                            label: labels[i],
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
           // The rail holds the display's leading inset.
           Expanded(
+            key: const ValueKey('shell-page'),
             child: MediaQuery.removePadding(
               context: context,
-              removeLeft: true,
+              removeLeft: rail,
               child: scaffold,
             ),
           ),

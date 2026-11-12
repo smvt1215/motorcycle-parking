@@ -43,17 +43,25 @@ final _platforms = TargetPlatformVariant({
   TargetPlatform.android,
 });
 
-Future<AppStore> _store(WidgetTester tester) async =>
+/// A store whose load keeps failing: the message stays through reloads.
+class _FailingStore extends AppStore {
+  _FailingStore(super.local, super.client, {super.clock});
+  @override
+  String? get error => '載入失敗，請重新整理。';
+  @override
+  set error(String? _) {}
+}
+
+Future<AppStore> _store(WidgetTester tester, {bool failing = false}) async =>
     (await tester.runAsync(() async {
       SharedPreferences.setMockInitialValues({
         'legendSeen': true,
         'availabilityBetaIntroSeen': true,
       });
-      final s = AppStore(
-        LocalRepository(await SharedPreferences.getInstance()),
-        null,
-        clock: () => detailDay,
-      );
+      final local = LocalRepository(await SharedPreferences.getInstance());
+      final s = failing
+          ? _FailingStore(local, null, clock: () => detailDay)
+          : AppStore(local, null, clock: () => detailDay);
       await s.init();
       return s;
     }))!;
@@ -380,6 +388,57 @@ void main() {
     expect(find.byType(MapActions), findsOneWidget);
   }, variant: _platforms);
 
+  testWidgets('整個 App 跨過平板寬度：地圖頁不重建，開著的點、篩選與搜尋文字都留著', (tester) async {
+    final store = await _store(tester);
+    await _pumpApp(tester, store, size: const Size(820, 1180));
+    await tester.enterText(find.byKey(_search), '信義');
+    await tester.tap(find.byKey(const ValueKey('parkable-filter')));
+    await tester.pumpAndSettle();
+    await _openFirst(tester);
+    expect(find.byKey(_panel), findsOneWidget);
+    final name = _openName(tester);
+    final page = tester.state(find.byType(MapPage));
+    bool? parkable() => tester
+        .widget<Semantics>(
+          find
+              .descendant(
+                of: find.byKey(const ValueKey('parkable-filter')),
+                matching: find.byType(Semantics),
+              )
+              .first,
+        )
+        .properties
+        .toggled;
+    expect(parkable(), isTrue);
+    // Split screen leaves half: the rail gives way to the bottom bar, the
+    // panel to the phone's card, on the same page.
+    tester.view.physicalSize = const Size(590, 820);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.state(find.byType(MapPage)), same(page));
+    expect(find.byType(M3ENavigationRail), findsNothing);
+    expect(find.byKey(_panel), findsNothing);
+    expect(find.byKey(_overlay), findsOneWidget);
+    expect(_openName(tester), name);
+    expect(parkable(), isTrue);
+    expect(
+      tester.widget<TextField>(find.byKey(_search)).controller!.text,
+      '信義',
+    );
+    // And back.
+    tester.view.physicalSize = const Size(1180, 820);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(tester.state(find.byType(MapPage)), same(page));
+    expect(find.byKey(_panel), findsOneWidget);
+    expect(_openName(tester), name);
+    expect(parkable(), isTrue);
+    expect(
+      tester.widget<TextField>(find.byKey(_search)).controller!.text,
+      '信義',
+    );
+  }, variant: _platforms);
+
   for (final size in _tablets) {
     for (final scale in [1.0, 1.3, 2.0]) {
       for (final brightness in Brightness.values) {
@@ -447,8 +506,7 @@ void main() {
   }
 
   testWidgets('平板：載入失敗的提示在地圖那一欄，不蓋住面板欄', (tester) async {
-    final store = await _store(tester);
-    store.error = '載入失敗，請重新整理。';
+    final store = await _store(tester, failing: true);
     await _pumpMap(tester, store, size: const Size(820, 1180));
     final card = tester.getRect(
       find
@@ -462,6 +520,22 @@ void main() {
     expect(card.right, lessThanOrEqualTo(820 - 16));
     expect(card.top, greaterThan(tester.getRect(find.byKey(_filters)).bottom));
     expect(find.byTooltip('重新整理').hitTestable(), findsOneWidget);
+    // Zoomed out, the map's own notice comes under it, not over it.
+    final map = tester.widget<FlutterMap>(find.byType(FlutterMap));
+    map.mapController!.move(map.mapController!.camera.center, 5);
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pumpAndSettle();
+    final notice = tester.getRect(
+      find
+          .ancestor(
+            of: find.byKey(const ValueKey('map-notice')),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    expect(notice.top, greaterThan(card.bottom));
+    expect(notice.left, greaterThan(16 + sidePanelWidth));
+    expect(notice.right, lessThanOrEqualTo(820 - 16));
     expect(tester.takeException(), isNull);
   }, variant: _platforms);
 
@@ -632,6 +706,49 @@ void main() {
         expect(find.text('送出回報').hitTestable(), findsOneWidget);
       }, variant: _platforms);
     }
+
+    testWidgets('開著時視窗變窄：改成底部的卡片，不超出視窗，選的狀態留著', (tester) async {
+      final store = await _store(tester);
+      await _pumpApp(tester, store, size: const Size(820, 1180));
+      await _openFirst(tester);
+      await tester.tap(find.text('回報現場狀況'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('快滿了'));
+      await tester.pumpAndSettle();
+      final sheet = tester.state(find.byType(SightingSheet));
+      for (final narrow in const [Size(320, 1180), Size(590, 820)]) {
+        tester.view.physicalSize = narrow;
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull, reason: '$narrow');
+        final panel = tester.getRect(
+          find.byKey(const ValueKey('side-panel')).last,
+        );
+        expect(panel.left, 0, reason: '$narrow');
+        expect(panel.right, narrow.width, reason: '$narrow');
+        expect(panel.bottom, narrow.height, reason: '$narrow');
+        expect(panel.top, greaterThan(0), reason: '$narrow');
+        final send = tester.getRect(find.text('送出回報'));
+        expect(send.left, greaterThanOrEqualTo(0), reason: '$narrow');
+        expect(send.right, lessThanOrEqualTo(narrow.width), reason: '$narrow');
+        expect(
+          send.bottom,
+          lessThanOrEqualTo(narrow.height),
+          reason: '$narrow',
+        );
+        // The same sheet, with what was chosen.
+        expect(tester.state(find.byType(SightingSheet)), same(sheet));
+      }
+      // Wide again: back in the panel's place.
+      tester.view.physicalSize = const Size(1180, 820);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      final panel = tester.getRect(
+        find.byKey(const ValueKey('side-panel')).last,
+      );
+      expect(panel.left, isCupertino ? 16 : tabletRailWidth + 16);
+      expect(panel.width, sidePanelWidth);
+      expect(tester.state(find.byType(SightingSheet)), same(sheet));
+    }, variant: _platforms);
 
     testWidgets('手機：照舊從底部升起，佔滿寬度', (tester) async {
       final store = await _store(tester);

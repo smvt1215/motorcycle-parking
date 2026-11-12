@@ -162,43 +162,72 @@ class SidePanelRoute<T> extends PopupRoute<T> {
   @override
   Duration get transitionDuration => const Duration(milliseconds: 250);
 
+  /// Keeps what the rider chose when the panel changes shape.
+  final _content = GlobalKey(debugLabel: 'side-panel-route-content');
+
   @override
   Widget buildPage(
     BuildContext context,
     Animation<double> animation,
     Animation<double> secondaryAnimation,
-  ) => Stack(
-    children: [
-      SidePanelSlot(
-        left: sidePanelWindowLeft(context),
-        // A route of its own for assistive technology, as a sheet is.
-        child: Semantics(
-          scopesRoute: true,
-          explicitChildNodes: true,
-          child: SidePanel(
-            // The window's own insets hold inside the panel: the keyboard
-            // and the home indicator.
-            child: MediaQuery.removePadding(
-              context: context,
-              removeTop: true,
-              removeLeft: true,
-              removeRight: true,
-              child: Column(
+  ) {
+    final content = KeyedSubtree(key: _content, child: builder(context));
+    // The window's own insets hold inside the panel: the keyboard and the
+    // home indicator.
+    Widget surface(Widget child) => Semantics(
+      // A route of its own for assistive technology, as a sheet is.
+      scopesRoute: true,
+      explicitChildNodes: true,
+      child: SidePanel(
+        child: MediaQuery.removePadding(
+          context: context,
+          removeTop: true,
+          removeLeft: true,
+          removeRight: true,
+          child: child,
+        ),
+      ),
+    );
+    if (!isTabletLayout(context)) {
+      // The window shrank under the open panel (Split View, a resized
+      // window): it becomes the sheet a phone shows, across the bottom.
+      return SafeArea(
+        bottom: false,
+        child: Align(
+          alignment: Alignment.bottomCenter,
+          child: SizedBox(
+            width: double.infinity,
+            child: surface(
+              Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   const SidePanelGrabber(),
-                  // As a bottom sheet does: the content ends above the
-                  // home indicator.
-                  Expanded(
-                    child: SafeArea(top: false, child: builder(context)),
-                  ),
+                  Flexible(child: SafeArea(top: false, child: content)),
                 ],
               ),
             ),
           ),
         ),
-      ),
-    ],
-  );
+      );
+    }
+    return Stack(
+      children: [
+        SidePanelSlot(
+          left: sidePanelWindowLeft(context),
+          child: surface(
+            Column(
+              children: [
+                const SidePanelGrabber(),
+                // As a bottom sheet does: the content ends above the
+                // home indicator.
+                Expanded(child: SafeArea(top: false, child: content)),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
 
   @override
   Widget buildTransitions(
