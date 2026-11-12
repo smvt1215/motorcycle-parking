@@ -155,12 +155,46 @@ reset role;
 select is((select note||'|'||cardinality(content_held) from community_spots where id='7b000000-0000-4000-8000-000000000002'),'改過的備註|0',
   'the edit is published and nothing is held');
 
--- 舊審核頁結案也會放回。
+-- 舊審核頁（admin_resolve_report）不能結案內容檢舉（#326 方案 B）：結案會
+-- 經 moderation_inappropriate_resolved 把原文放回。
 select pg_temp.flag(3,'7b000000-0000-4000-8000-000000000002','text','f');
-select is((select note from community_spots where id='7b000000-0000-4000-8000-000000000002'),'','hidden again');
-update moderation_queue set status='rejected',resolution_kind='abuse',resolved_at=now() where reporter_id=pg_temp.uid(3)
+insert into ids select 'legacy',id from moderation_queue where reporter_id=pg_temp.uid(3)
   and source_id='7b000000-0000-4000-8000-000000000002';
-select is((select note from community_spots where id='7b000000-0000-4000-8000-000000000002'),'改過的備註','closing it anywhere restores it');
+select is((select note from community_spots where id='7b000000-0000-4000-8000-000000000002'),'','hidden again');
+set local role authenticated;
+select pg_temp.act('admin');
+select throws_ok(format('select admin_resolve_report(%L,''accepted'')',(select id from ids where k='legacy')),
+  'P0421','content reports are resolved on the pending cases page','the old page cannot close a content report as is');
+select throws_ok(format('select admin_resolve_report(%L,''accepted'',''{"note":"舊頁改的備註"}'')',(select id from ids where k='legacy')),
+  'P0421','content reports are resolved on the pending cases page','nor apply an edit to it');
+select throws_ok(format('select admin_resolve_report(%L,''rejected'',''{}'',''騎士亂報'',false,''abuse'')',(select id from ids where k='legacy')),
+  'P0421','content reports are resolved on the pending cases page','nor reject it');
+reset role;
+select is((select status||'|'||(resolved_at is null)::text from moderation_queue where id=(select id from ids where k='legacy')),
+  'pending|true','the report stays open');
+select is((select note||'|'||array_to_string(content_held,',') from community_spots where id='7b000000-0000-4000-8000-000000000002'),
+  '|text','and the text stays hidden');
+select ok(not exists(select 1 from admin_audit_log where action='resolve_report' and target_id=(select id::text from ids where k='legacy')),
+  'nothing is audited for the refused attempts');
+-- 其他回報照舊由舊審核頁處理。
+insert into moderation_queue(source_id,reporter_id,reason,field,proposed)
+values('7b000000-0000-4000-8000-000000000002',pg_temp.uid(2),'名稱錯了','name','{"name":"第二點（改）"}');
+set local role authenticated;
+select pg_temp.act('admin');
+select is((admin_resolve_report((select id from moderation_queue where reporter_id=pg_temp.uid(2)
+    and source_id='7b000000-0000-4000-8000-000000000002' and field='name'),'accepted','{"name":"第二點（改）"}'))->>'status',
+  'accepted','a report that is not a content report still resolves there');
+reset role;
+select is((select name||'|'||note||'|'||array_to_string(content_held,',') from community_spots where id='7b000000-0000-4000-8000-000000000002'),
+  '第二點（改）||text','the edit lands and the held text stays hidden');
+-- 被拒絕的內容檢舉仍由案件頁正常結案，原文照常放回。
+set local role authenticated;
+select pg_temp.act('admin');
+select is((admin_v1.resolve_content_report((select id::text from ids where k='legacy'),'restore',
+  (select updated_at from community_spots where id='7b000000-0000-4000-8000-000000000002'),null,'abuse'))->>'status',
+  'rejected','the pending cases page still resolves it');
+reset role;
+select is((select note from community_spots where id='7b000000-0000-4000-8000-000000000002'),'改過的備註','restoring puts the text back');
 -- 駁回後內容沒變，再檢舉同樣部分：等人工審核。
 select pg_temp.flag(6,'7b000000-0000-4000-8000-000000000002','text','k');
 select is((select held||'|'||array_to_string(risk_flags,',') from moderation_queue where reporter_id=pg_temp.uid(6)

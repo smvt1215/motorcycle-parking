@@ -279,6 +279,40 @@ void main() {
       expect(review.error, contains('已由其他人處理'));
     });
 
+    test('內容檢舉不能在這裡結案，不送出（#326）', () async {
+      gateway.reports = [contentReport, ...gateway.reports];
+      await review.load();
+      final report = review.byId('r-content')!;
+      for (final (decision, kind) in [
+        (ReviewDecision.close, null),
+        (ReviewDecision.accept, null),
+        (ReviewDecision.reject, ResolutionKind.abuse),
+      ]) {
+        review.error = null;
+        expect(
+          await review.decide(report, decision, '', resolutionKind: kind),
+          report.id,
+        );
+        expect(review.error, contentReportElsewhere);
+        expect(review.pending, isNull);
+        expect(review.byId(report.id), isNotNull);
+      }
+      await review.flush();
+      expect(gateway.resolved, isEmpty);
+    });
+
+    test('伺服器拒絕內容檢舉時說明到案件頁處理，留在佇列（#326）', () async {
+      final first = review.queue.first;
+      gateway.resolveError = const PostgrestException(
+        message: 'content reports are resolved on the pending cases page',
+        code: 'P0421',
+      );
+      await review.decide(first, ReviewDecision.accept, '');
+      await review.flush();
+      expect(review.queue.first.id, first.id);
+      expect(review.error, '「${first.title}」沒有處理：$contentReportElsewhere');
+    });
+
     test('修改後套用送出編輯值；無效值不送出', () async {
       final first = review.queue.first;
       review.startEdit(first);
@@ -810,6 +844,30 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('仍要套用建議'), findsOneWidget);
     });
+
+    for (final width in [390.0, 820.0, 1280.0]) {
+      testWidgets('內容檢舉的結案按鈕停用並說明到案件頁（${width.toInt()} px，#326）', (
+        tester,
+      ) async {
+        gateway.reports = [contentReport];
+        await show(tester, path: '/review/r-content', size: Size(width, 900));
+        expect(find.text(contentReportElsewhere), findsWidgets);
+        for (final label in ['修改後套用', '結案不修改', '駁回']) {
+          final button = find.ancestor(
+            of: find.text(label),
+            matching: find.byWidgetPredicate((w) => w is ButtonStyleButton),
+          );
+          expect(button, findsOneWidget, reason: label);
+          for (final b in tester.widgetList<ButtonStyleButton>(button)) {
+            expect(b.onPressed, isNull, reason: label);
+          }
+        }
+        await tester.tap(find.text('駁回'), warnIfMissed: false);
+        await tester.pumpAndSettle();
+        expect(gateway.resolved, isEmpty);
+        expect(tester.takeException(), isNull);
+      });
+    }
 
     testWidgets('舊版回報沒有建議值時可結案或修改', (tester) async {
       await show(tester, path: '/review/r-legacy');
