@@ -159,10 +159,10 @@ Resend 網域的 click tracking 維持關閉（一次性連結不可被改寫）
 
 ### 內容不當檢舉通知信（`report-mail`）
 
-migration `202611021100_content_reports.sql` 在每筆新的內容不當檢舉（#280）寫入待寄通知，並建立每 5 分鐘的 pg_cron 工作 `report-mail`，經 pg_net 呼叫 Edge Function `report-mail` 寄信到 `SUPPORT_MAIL_TO`（ops@）。信件只含檢舉編號與管理站審核頁連結。以下只設定在各自 Supabase 專案，**不進版控**；缺任何一個時不寄信，通知留著等下次：
+migration `202611021100_content_reports.sql` 在每筆新的內容不當檢舉（#280）寫入待寄通知，並建立每 5 分鐘的 pg_cron 工作 `report-mail`，經 pg_net 呼叫 Edge Function `report-mail` 寄信到 `SUPPORT_MAIL_TO`（ops@）。信件只含檢舉編號與管理站「待處理」的案件連結（#449）。以下只設定在各自 Supabase 專案，**不進版控**；缺任何一個時不寄信，通知留著等下次：
 
 1. 共用密鑰（`openssl rand -hex 32`）：`supabase secrets set REPORT_MAIL_SECRET=<密鑰> --project-ref <ref>`，Vault：`select vault.create_secret('<密鑰>','report_mail_secret');`（`project_url` 與即時車位共用）。
-2. `supabase secrets set ADMIN_REVIEW_URL=https://<管理站網址>/review --project-ref <ref>`（信中連結為 `<ADMIN_REVIEW_URL>/<檢舉編號>`）。
+2. `supabase secrets set ADMIN_PENDING_URL=https://<管理站網址>/pending --project-ref <ref>`。信中連結為 `<ADMIN_PENDING_URL>/<案件編號>`：案件編號是這筆檢舉所在的待處理案件（同一點、同一檢舉部分未結案的檢舉併成一案，編號是組內最早一則的檢舉編號，所以後到的檢舉連到先到那筆的案件）；寄信時已結案的，連結改為待處理清單 `<ADMIN_PENDING_URL>`。舊設定 `ADMIN_REVIEW_URL`（`https://<管理站網址>/review`）仍可用：沒有 `ADMIN_PENDING_URL` 時取它的網站加上 `/pending`，所以已設舊值的專案不必改 secret；新專案只設 `ADMIN_PENDING_URL`。
 3. `RESEND_API_KEY`、`SUPPORT_MAIL_FROM`、`SUPPORT_MAIL_TO` 與客服表單共用。
 4. 確認：`select count(*) filter (where sent_at is null) from private.report_notices;` 應在 5 分鐘內歸零。
 
