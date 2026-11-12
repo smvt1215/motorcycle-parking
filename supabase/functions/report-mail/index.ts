@@ -2,24 +2,27 @@ import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { response } from '../_shared/http.ts';
 import { resendConfig, sendMail } from '../support-request/resend.ts';
 import {
+  alreadySent,
+  caseLink,
   fuseNoticeMail,
   handle,
   type Notice,
+  pendingBase,
   reportNoticeMail,
 } from './handler.ts';
 
 Deno.serve((req) => {
   const url = Deno.env.get('SUPABASE_URL'),
     key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'),
-    // The admin site's review page, e.g. https://<admin>/review; the
-    // report id is appended.
-    reviewBase = Deno.env.get('ADMIN_REVIEW_URL')?.trim().replace(/\/$/, '');
+    // The admin site's 待處理 page, e.g. https://<admin>/pending; the case
+    // id is appended (/pending/:caseId).
+    base = pendingBase((name) => Deno.env.get(name));
   if (!url || !key) return response({ error: 'server.unavailable' }, 503);
   const db = createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
   // Resend and SUPPORT_MAIL_TO, as support-request; without them, or
-  // without the review link, nothing is sent and the notices wait.
+  // without the admin link, nothing is sent and the notices wait.
   const config = resendConfig((name) => Deno.env.get(name));
   return handle(req, {
     secret: Deno.env.get('REPORT_MAIL_SECRET') ?? '',
@@ -30,15 +33,20 @@ Deno.serve((req) => {
       if (error) throw error;
       return (data ?? []) as Notice[];
     },
-    async send({ id, kind }) {
-      if (!config || !reviewBase) return false;
+    async send(notice) {
+      if (!config || !base) return false;
+      const { id, kind } = notice;
       const mail = kind === 'fuse' ? fuseNoticeMail : reportNoticeMail;
-      await sendMail(
-        config,
-        { to: config.to, ...mail(id, `${reviewBase}/${id}`) },
-        // A retry of the same notice is not sent twice (kept 24 hours).
-        `content-report/${kind}/${id}`,
-      );
+      try {
+        await sendMail(
+          config,
+          { to: config.to, ...mail(id, caseLink(base, notice)) },
+          // A retry of the same notice is not sent twice (kept 24 hours).
+          `content-report/${kind}/${id}`,
+        );
+      } catch (error) {
+        if (!alreadySent(error)) throw error;
+      }
       return true;
     },
     async sent({ id, kind }) {

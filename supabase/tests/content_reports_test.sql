@@ -96,6 +96,24 @@ select is((select count(*)::int from moderation_queue where source_id='79000000-
   'as before');
 
 -- ===== 通知 =====
+-- 信中連結開「待處理」的案件（#449，202611121000）：案件 id 是同一點、同一
+-- target 未結案組內最早一則，和 timed_case_rows 一致；已結案的為 null。
+select lives_ok($$select pg_temp.flag(7,'79000000-0000-4000-8000-000000000001','rider_name','也看到了','w')$$,
+  'a second open report joins the same case');
+select is((select count(distinct p.case_id)::int from public.report_mail_pending(200) p
+  join moderation_queue q on q.id=p.id
+  where q.source_id='79000000-0000-4000-8000-000000000001' and q.proposed->>'target'='rider_name' and q.resolved_at is null),1,
+  'every notice in one group links to one case');
+select is((select array_agg(p.id order by p.id) from public.report_mail_pending(200) p
+  join private.timed_case_rows() r on r.type='report' and r.id=p.case_id::text
+  join moderation_queue q on q.id=p.id
+  where r.spot_id=q.source_id and r.kind=q.proposed->>'target'),
+  (select array_agg(p.id order by p.id) from public.report_mail_pending(200) p where p.id<>(select id from first_report)),
+  'each open report links to the 待處理 case it is in');
+select ok((select count(*)::int from public.report_mail_pending(200) p join moderation_queue q on q.id=p.id
+  where p.case_id is not null and p.case_id<>p.id)>=1,'a later report links to the case, not to its own id');
+select is((select p.case_id from public.report_mail_pending(200) p where p.id=(select id from first_report)),null,
+  'a resolved report links to the list');
 set local role service_role;
 select ok((select count(*) from public.report_mail_pending(200))>=5,'report-mail reads the pending ids');
 select lives_ok(format('select public.report_mail_sent(%L)',(select id from first_report)),'and marks one sent');

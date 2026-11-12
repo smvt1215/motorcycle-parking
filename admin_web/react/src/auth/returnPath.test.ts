@@ -10,6 +10,12 @@ describe('returnPath', () => {
     expect(takeReturnPath()).toBeNull();
   });
 
+  it('keeps the case a report notice mail links to (#449)', () => {
+    const path = '/pending/5f0c2a9e-1b2c-4d3e-8f40-123456789abc';
+    saveReturnPath({ pathname: path, search: '' });
+    expect(takeReturnPath()).toBe(path);
+  });
+
   it('ignores anywhere that is not 待處理', () => {
     saveReturnPath({ pathname: '/spots', search: '' });
     expect(takeReturnPath()).toBeNull();

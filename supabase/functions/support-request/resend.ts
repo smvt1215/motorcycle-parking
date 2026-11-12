@@ -58,6 +58,25 @@ export function resendConfig(
 }
 
 /**
+ * A refused send. The message stays `resend <status>` (support-mail records
+ * it); code is Resend's error name, read only for a 409: invalid_idempotent_
+ * request (the key already sent a different body within 24 hours) or
+ * concurrent_idempotent_requests (that send is still running).
+ */
+export class ResendError extends Error {
+  constructor(readonly status: number, readonly code: string | null = null) {
+    super(`resend ${status}`);
+  }
+}
+
+async function errorCode(res: Response): Promise<string | null> {
+  const body = await res.json().catch(() => null) as
+    | { name?: unknown }
+    | null;
+  return typeof body?.name === 'string' ? body.name.slice(0, 100) : null;
+}
+
+/**
  * Sends one mail; a retry with the same key is not sent twice (24 hours).
  * Resolves to Resend's id for the mail, when it gives one.
  */
@@ -83,8 +102,12 @@ export async function sendMail(
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) {
-    await res.body?.cancel();
-    throw new Error(`resend ${res.status}`);
+    // Only a 409 says which idempotency error it is; the rest are not read.
+    if (res.status !== 409) {
+      await res.body?.cancel();
+      throw new ResendError(res.status);
+    }
+    throw new ResendError(res.status, await errorCode(res));
   }
   const body = await res.json().catch(() => null) as { id?: unknown } | null;
   return typeof body?.id === 'string' ? body.id.slice(0, 100) : null;

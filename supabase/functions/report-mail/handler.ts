@@ -1,11 +1,13 @@
 // report-mail: tells the support inbox (SUPPORT_MAIL_TO, ops@) about each
 // new inappropriate-content report (#280). The mail carries only the report
-// id and the admin review link: no content, spot, reporter or contributor.
+// id and the link to its case on the admin site's 待處理 page (#449): no
+// content, spot, reporter or contributor.
 // pg_cron and the insert itself call it through pg_net with the shared
 // REPORT_MAIL_SECRET (public.report_mail_tick(), migration
 // 202611021100_content_reports.sql); a notice not sent waits for the next.
 import { response } from '../_shared/http.ts';
 import { sameSecret } from '../account-deletion/handler.ts';
+import { ResendError } from '../support-request/resend.ts';
 
 /** Notices sent per call; the rest wait for the next. */
 export const batchSize = 50;
@@ -15,7 +17,13 @@ export const batchSize = 50;
  * (#280 layer 3), later reports only wait for review.
  */
 export type NoticeKind = 'new' | 'fuse';
-export type Notice = { id: string; kind: NoticeKind };
+/**
+ * id: the report (queue) id. case_id: the 待處理 case it is in now, the
+ * earliest open report on the same spot and target (migration
+ * 202611121000_report_mail_case_link.sql); null once it is resolved, and
+ * missing before that migration.
+ */
+export type Notice = { id: string; kind: NoticeKind; case_id?: string | null };
 
 export type Deps = {
   /** REPORT_MAIL_SECRET; empty when unset. */
@@ -59,6 +67,58 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
     }
   }
   return response({ sent, failed, skipped });
+}
+
+/**
+ * Where 待處理 lives: ADMIN_PENDING_URL (https://<admin>/pending), or, so a
+ * project still set up with ADMIN_REVIEW_URL (https://<admin>/review) keeps
+ * sending, the same site's /pending. Hosting serves 待處理 at /pending on
+ * the admin origin (firebase.json, admin_web/react/vite.config.ts). Null when
+ * the one in use is not an http(s) URL, or ADMIN_PENDING_URL has a query or
+ * a fragment (the case id could not follow it): nothing is sent and the
+ * notices wait, as with no link set.
+ */
+export function pendingBase(
+  env: (name: string) => string | undefined,
+): string | null {
+  const pending = env('ADMIN_PENDING_URL')?.trim();
+  if (pending) {
+    const url = webUrl(pending);
+    if (!url || pending.includes('?') || pending.includes('#')) return null;
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  }
+  const review = env('ADMIN_REVIEW_URL')?.trim();
+  const url = review ? webUrl(review) : null;
+  return url ? `${url.origin}/pending` : null;
+}
+
+function webUrl(value: string): URL | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resend already took a mail under this notice's key within 24 hours, with
+ * other text: the link follows the case at send time, so a retry after an
+ * unmarked send can differ (the case was resolved, or a deploy changed the
+ * link). The notice went out, so it is marked sent rather than failing every
+ * run and going out again once the key expires. A concurrent send under the
+ * same key (concurrent_idempotent_requests) is still a failure, retried.
+ */
+export function alreadySent(error: unknown): boolean {
+  return error instanceof ResendError && error.status === 409 &&
+    error.code === 'invalid_idempotent_request';
+}
+
+/** The case's page; the list when the report is no longer in an open case. */
+export function caseLink(base: string, notice: Notice): string {
+  return notice.case_id
+    ? `${base}/${encodeURIComponent(notice.case_id)}`
+    : base;
 }
 
 /** The notice: the report id and the admin page link, nothing else. */
