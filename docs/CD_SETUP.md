@@ -187,11 +187,14 @@ App 與網站只用 Google／Apple 的 ID token 登入（`signInWithIdToken`）�
 
 `supabase/config.toml` 的 `[auth.email] enable_signup = false` 只管本機與 CI 的 `supabase start`；**CD 不會推送 Auth 設定**（只做 `db push` 與函式部署），遠端要在 Dashboard 手動設定：
 
-1. 每個專案（staging、production）：Authentication → Sign In / Providers → Email → 關閉 Enable Email provider → Save。production 建立專案時就先關，再開放任何登入。
-2. 關閉前先唯讀確認沒有人靠 email 登入：`select provider, count(*) from auth.identities group by provider;` 應只有 `google`、`apple`；有 `email` 的帳號關閉後就不能再用 email 登入，先與專案擁有者確認。
+每個專案（staging、production）依序做：
+
+1. 先唯讀確認沒有人靠 email 登入：`select provider, count(*) from auth.identities group by provider;` 應只有 `google`、`apple`；有 `email` 的帳號（含資料匯入用的 bot 帳號）關閉後就不能再用 email 登入，先與專案擁有者確認。
+2. Authentication → Sign In / Providers → Email → 關閉 Enable Email provider → Save。production 建立專案時就先關，再開放任何登入。**只關 Email provider**，頂層的「Allow new users to sign up」必須維持開啟，否則 Google／Apple 新註冊也會被擋。
 3. 驗證關閉：
-   - `POST <SUPABASE_URL>/auth/v1/signup`（header `apikey: <publishable key>`，body `{"email":"probe@example.com","password":"Probe-12345"}`）應回 `422`、`error_code: email_provider_disabled`（或 `signup_disabled`），且 Authentication → Users 沒有新增 probe 帳號。
-   - `POST <SUPABASE_URL>/auth/v1/token?grant_type=password` 以任意 email 與密碼應回 `422 email_provider_disabled`。
+   - `POST <SUPABASE_URL>/auth/v1/signup`（header `apikey: <publishable key>`，body `{"email":"probe@example.com","password":"Probe-12345"}`）應回 4xx，且 `error_code` 必須是 `email_provider_disabled`（依 Supabase Auth〔GoTrue〕原始碼，Email provider 關閉時 signup 回 400；狀態碼可能隨版本不同，以 `error_code` 判斷）。**若回 `signup_disabled`，代表關到頂層的註冊開關，要立刻把它開回來**，再確認 Google／Apple 新註冊正常。
+   - 這個 signup 測試在 provider 其實沒關時會真的在遠端建立 `probe@example.com` 帳號；發生時到 Authentication → Users 刪除該帳號，再回頭重做步驟 2。完成後也確認 Users 裡沒有 probe 帳號。
+   - `POST <SUPABASE_URL>/auth/v1/token?grant_type=password` 以任意 email 與密碼應回 4xx（GoTrue 為 422），`error_code` 為 `email_provider_disabled`。
    - 用 Google 與 Apple 各完成一次**新帳號註冊**與一次既有帳號登入（App 與網站），確認不受影響；ID token 登入與 refresh token 更新都不屬於 Email provider。
 4. 本機 `[auth.email] enable_confirmations = false` 等於所有 email 都視為已驗證，只可用於本機；日後若需要開啟 Email provider（例如管理站改用 email 驗證），production 必須先把「Confirm email」開啟，不可照抄本機值。
 
