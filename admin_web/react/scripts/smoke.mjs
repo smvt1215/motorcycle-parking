@@ -39,6 +39,7 @@ const PAGES = [
   '/pending/72d1bb21-0000-4000-8000-000000000008',
   '/pending/61a2d7e0-0000-4000-8000-000000000001',
   '/pending/7a000000-0000-4000-8000-000000000000?scenario=many',
+  '/pending/79000000-0000-4000-8000-000000000000?scenario=many',
   '/pending/7d000000-0000-4000-8000-000000000000?scenario=many',
   '/pending/7e000000-0000-4000-8000-000000000000?scenario=many',
   '/spots',
@@ -215,6 +216,20 @@ for (const viewport of VIEWPORTS) {
   if (viewport.phone) {
     await page.getByRole('link', { name: /返回待處理/ }).click();
     await page.waitForURL(/\/pending$/);
+  }
+
+  // 寄送失敗: 再寄一次 only once the server has stopped retrying (#447).
+  for (const [id, retrying] of [
+    ['79000000', true],
+    ['7a000000', false],
+  ]) {
+    await open(page, `/pending/${id}-0000-4000-8000-000000000000?scenario=many`);
+    await page.getByRole('button', { name: '結案' }).waitFor();
+    const resend = await page.getByRole('button', { name: '再寄一次' }).count();
+    const notice = await page.getByText('系統正在自動重試').count();
+    if (resend !== (retrying ? 0 : 1) || notice !== (retrying ? 1 : 0)) {
+      failures.push(`${viewport.name} ${id}: 再寄一次 ${resend}, retry notice ${notice}`);
+    }
   }
 
   // 案件處理: send, the countdown, cancel, and the reply comes back.

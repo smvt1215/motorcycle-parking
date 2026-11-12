@@ -82,6 +82,9 @@ function request(item: TimedCase, extra: Partial<SupportRequest>): SupportReques
   };
 }
 
+/** A reply the server is still retrying (2 of 5 tries): `?scenario=many`. */
+export const RETRYING_CASE_ID = '79000000-0000-4000-8000-000000000000';
+
 const CHARGE = '「中正紀念堂東側機車格」的收費寫每小時 20 元，現場公告是每次 30 元，麻煩更正。';
 
 export function supportDetail(item: TimedCase): SupportRequestDetail {
@@ -119,6 +122,19 @@ export function supportDetail(item: TimedCase): SupportRequestDetail {
           dkim: 'none',
           dmarc: 'fail',
           attachments: ['公告.pdf'],
+        }),
+      ],
+    };
+  }
+  if (item.id === RETRYING_CASE_ID) {
+    return {
+      request: request(item, { message_count: 1 }),
+      messages: [
+        first,
+        message('m-failed', 'out', 'admin', '已更正收費，謝謝回報。', 1, {
+          delivery_status: 'failed',
+          attempts: 2,
+          sent_at: null,
         }),
       ],
     };
