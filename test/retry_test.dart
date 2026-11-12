@@ -1,3 +1,5 @@
+import 'dart:ui' show Size;
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -60,6 +62,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets('警示列重試會恢復規則與收藏，清除提示並更新畫面', (tester) async {
+    // The phone layout; a tablet-size window gets the side panel layout
+    // (tablet_layout_test).
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(390, 844);
+    addTearDown(tester.view.reset);
     SharedPreferences.setMockInitialValues({});
     final rules = RecoveringRules();
     final store = (await tester.runAsync(() async {

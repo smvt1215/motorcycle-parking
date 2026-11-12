@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +9,7 @@ import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/features/map/map_legend.dart';
 import 'package:motorcycle_parking/features/map/map_page.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
+import 'package:motorcycle_parking/features/sighting/sighting_sheet.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 import 'package:motorcycle_parking/ui/map_panel.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -99,12 +99,20 @@ Future<void> _pumpApp(
   WidgetTester tester,
   AppStore store, {
   required Size size,
+  double scale = 1,
+  Brightness brightness = Brightness.light,
 }) async {
   _size(tester, size);
+  tester.platformDispatcher.textScaleFactorTestValue = scale;
+  addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [storeProvider.overrideWith((ref) => store)],
-      child: const ParkingApp(),
+      child: ParkingApp(
+        themeMode: brightness == Brightness.dark
+            ? ThemeMode.dark
+            : ThemeMode.light,
+      ),
     ),
   );
   await tester.pump(const Duration(milliseconds: 500));
@@ -149,13 +157,14 @@ void main() {
       expect(search.left, 16);
       expect(search.width, sidePanelWidth);
       final filters = tester.getRect(find.byKey(_filters));
-      expect(filters.left, 16 + sidePanelWidth + 16);
+      // T1, T2: 16 after the panel on iPad, 12 on Android.
+      expect(filters.left, 16 + sidePanelWidth + (isCupertino ? 16 : 12));
       expect(filters.top, lessThan(search.bottom));
       final legend = tester.getRect(find.byKey(_legend));
       expect(legend.right, size.width - 16);
-      final upright = size.height > size.width;
-      if (!isCupertino && upright) {
-        // T1 Android: the filters take the whole width, the button under.
+      // The button ends the row while the filters keep room beside it.
+      final room = size.width - filters.left - (16 + legend.width + 12);
+      if (room < tabletFilterMinWidth) {
         expect(filters.right, size.width);
         expect(legend.top, greaterThan(filters.bottom));
       } else {
@@ -225,14 +234,12 @@ void main() {
   }
 
   testWidgets('窄視窗在 iPad 上有分頁列時照樣畫卡片底色（A1b）', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     final store = await _store(tester);
     await _pumpMap(tester, store, size: const Size(640, 1100), inset: 83);
     await _openFirst(tester);
     expect(find.byKey(_overlay), findsOneWidget);
     expect(find.byKey(_backing), findsOneWidget);
-    debugDefaultTargetPlatformOverride = null;
-  });
+  }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
 
   for (final size in _tablets) {
     testWidgets('平板 ${size.width.toInt()}×${size.height.toInt()}：'
@@ -305,8 +312,14 @@ void main() {
     expect(tester.getRect(find.byKey(_panel)).top, panelTop);
     // The name and the plates stay at the top while the rest scrolls.
     expect(
-      find.byKey(const ValueKey('spot-four-sign')).hitTestable(),
+      find.byKey(const ValueKey('four-sign-verdict')).hitTestable(),
       findsOneWidget,
+    );
+    expect(
+      tester.getRect(find.byKey(const ValueKey('spot-four-sign'))).top,
+      lessThan(
+        tester.getRect(find.byKey(const ValueKey('spot-panel-scroll'))).top,
+      ),
     );
 
     await tester.tap(find.byTooltip('關閉詳情'));
@@ -326,41 +339,46 @@ void main() {
     await _openFirst(tester);
     expect(find.byKey(_panel), findsOneWidget);
     await tester.tapAt(const Offset(800, 1000));
+    // The map waits out the double-tap window before reporting a tap.
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.pumpAndSettle();
     expect(find.byKey(_panel), findsNothing);
-  });
+  }, variant: _platforms);
 
-  testWidgets('旋轉與分割畫面：跨過平板寬度時面板與卡片互換，狀態留著', (tester) async {
-    debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
+  testWidgets('旋轉與分割畫面：跨過平板寬度時面板與卡片互換，同一個點留著', (tester) async {
     final store = await _store(tester);
     await _pumpMap(tester, store, size: const Size(820, 1180));
     await _openFirst(tester);
     final name = _openName(tester);
     final state = tester.state(find.byType(SpotSheet));
-    // Upright to on its side: still the panel.
+    // Upright to on its side: still the panel, the same one.
     tester.view.physicalSize = const Size(1180, 820);
     await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
     expect(find.byKey(_panel), findsOneWidget);
     expect(tester.getRect(find.byKey(_panel)).bottom, 820);
     expect(tester.state(find.byType(SpotSheet)), same(state));
-    // Split View leaves half the screen: the phone's sheet, same spot.
+    // Split View leaves half the screen: the phone's sheet, same spot,
+    // opened afresh at its resting height.
     tester.view.physicalSize = const Size(590, 820);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.byKey(_panel), findsNothing);
     expect(find.byKey(_overlay), findsOneWidget);
     expect(find.byType(DraggableScrollableSheet), findsOneWidget);
+    expect(find.byType(SpotSheet), findsOneWidget);
     expect(_openName(tester), name);
-    expect(tester.state(find.byType(SpotSheet)), same(state));
+    expect(find.byType(MapActions), findsNothing);
     // And back to the full screen.
     tester.view.physicalSize = const Size(1180, 820);
     await tester.pumpAndSettle();
     expect(tester.takeException(), isNull);
     expect(find.byKey(_overlay), findsNothing);
     expect(find.byKey(_panel), findsOneWidget);
-    expect(tester.state(find.byType(SpotSheet)), same(state));
-    debugDefaultTargetPlatformOverride = null;
-  });
+    expect(find.byType(SpotSheet), findsOneWidget);
+    expect(_openName(tester), name);
+    expect(find.byType(MapActions), findsOneWidget);
+  }, variant: _platforms);
 
   for (final size in _tablets) {
     for (final scale in [1.0, 1.3, 2.0]) {
@@ -400,6 +418,18 @@ void main() {
             tester.getRect(navigate).bottom,
             lessThanOrEqualTo(size.height - (isCupertino ? 72 : 0)),
           );
+          // The four plates are in view, above the actions.
+          for (final face in ['verdict', 'seat', 'fee', 'where']) {
+            final plate = tester.getRect(
+              find.byKey(ValueKey('four-sign-$face')),
+            );
+            expect(plate.left, greaterThanOrEqualTo(panel.left), reason: face);
+            expect(plate.right, lessThanOrEqualTo(panel.right), reason: face);
+          }
+          expect(
+            find.byKey(const ValueKey('four-sign-verdict')).hitTestable(),
+            findsOneWidget,
+          );
           // Every section can be reached.
           await tester.tap(find.byKey(const ValueKey('four-sign-where')));
           await tester.pumpAndSettle();
@@ -416,11 +446,210 @@ void main() {
     }
   }
 
+  testWidgets('平板：載入失敗的提示在地圖那一欄，不蓋住面板欄', (tester) async {
+    final store = await _store(tester);
+    store.error = '載入失敗，請重新整理。';
+    await _pumpMap(tester, store, size: const Size(820, 1180));
+    final card = tester.getRect(
+      find
+          .ancestor(
+            of: find.text(store.error!),
+            matching: find.byType(Material),
+          )
+          .first,
+    );
+    expect(card.left, greaterThan(16 + sidePanelWidth));
+    expect(card.right, lessThanOrEqualTo(820 - 16));
+    expect(card.top, greaterThan(tester.getRect(find.byKey(_filters)).bottom));
+    expect(find.byTooltip('重新整理').hitTestable(), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  }, variant: _platforms);
+
+  testWidgets('平板：搜尋結果在面板欄，選一筆開在左側面板', (tester) async {
+    final store = await _store(tester);
+    await _pumpMap(tester, store, size: const Size(1180, 820));
+    await tester.tap(find.byKey(_search));
+    await tester.pumpAndSettle();
+    final results = tester.getRect(
+      find.byKey(const ValueKey('parking-search-results')),
+    );
+    expect(results.left, greaterThanOrEqualTo(16));
+    expect(results.right, lessThanOrEqualTo(16 + sidePanelWidth));
+    await tester.tap(find.byIcon(Icons.north_west).first);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+    expect(find.byKey(_panel), findsOneWidget);
+    expect(find.byKey(_overlay), findsNothing);
+  }, variant: _platforms);
+
+  group('個人中心與貢獻', () {
+    for (final size in _tablets) {
+      for (final (scale, brightness) in [
+        (1.0, Brightness.light),
+        (1.0, Brightness.dark),
+        (1.3, Brightness.light),
+        (2.0, Brightness.dark),
+      ]) {
+        testWidgets('平板 ${size.width.toInt()}×${size.height.toInt()} '
+            '字級 $scale ${brightness.name}：面板在同一個位置，不溢位', (tester) async {
+          final store = await _store(tester);
+          await _pumpApp(
+            tester,
+            store,
+            size: size,
+            scale: scale,
+            brightness: brightness,
+          );
+          final left = isCupertino ? 16.0 : tabletRailWidth + 16;
+          for (final tab in ['個人中心', '貢獻']) {
+            await tester.tap(find.text(tab).last);
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull, reason: tab);
+            final panel = tester.getRect(
+              find
+                  .descendant(
+                    of: find.byType(MapPanel),
+                    matching: find.byKey(const ValueKey('side-panel')),
+                  )
+                  .hitTestable(),
+            );
+            expect(panel.left, left, reason: tab);
+            expect(panel.width, sidePanelWidth, reason: tab);
+            expect(panel.bottom, size.height, reason: tab);
+            // Under where the search field stands on the map tab, so the
+            // panel does not jump between tabs. The field itself and the
+            // filters belong to the map tab only.
+            expect(panel.top, greaterThan(0), reason: tab);
+            expect(find.byKey(_search).hitTestable(), findsNothing);
+            expect(find.byType(DraggableScrollableSheet), findsNothing);
+            // The map stays in view beside it.
+            expect(find.byType(SpotMarker), findsWidgets);
+            if (tab == '貢獻') {
+              // The new spot action is inside the panel on both systems.
+              final add = tester.getRect(
+                find.byKey(const ValueKey('contribute-new-spot')),
+              );
+              expect(add.left, greaterThanOrEqualTo(left));
+              expect(add.right, lessThanOrEqualTo(left + sidePanelWidth));
+              expect(add.bottom, lessThanOrEqualTo(size.height));
+            }
+            // The whole list can be reached above the iPad's tab bar.
+            await tester.drag(
+              find.byKey(const ValueKey('map-panel-list')).hitTestable(),
+              const Offset(0, -4000),
+            );
+            await tester.pumpAndSettle();
+            expect(tester.takeException(), isNull, reason: tab);
+          }
+        }, variant: _platforms);
+      }
+    }
+
+    testWidgets('手機：貢獻的新增按鈕仍在畫面右下，面板仍是可拖曳的卡片', (tester) async {
+      final store = await _store(tester);
+      await _pumpApp(tester, store, size: const Size(390, 844));
+      await tester.tap(find.text('貢獻').last);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('side-panel')), findsNothing);
+      expect(find.byType(DraggableScrollableSheet), findsWidgets);
+      final add = tester.getRect(
+        find.byKey(const ValueKey('contribute-new-spot')),
+      );
+      expect(add.right, 390 - 16);
+    }, variant: TargetPlatformVariant.only(TargetPlatform.android));
+  });
+
+  group('回報現場狀況（A7c ⑦⑧）', () {
+    for (final size in _tablets) {
+      testWidgets('平板 ${size.width.toInt()}×${size.height.toInt()}：'
+          '從詳情開在同一個面板位置，加遮罩，取消回到詳情', (tester) async {
+        final store = await _store(tester);
+        await _pumpApp(tester, store, size: size);
+        await _openFirst(tester);
+        final detail = tester.getRect(find.byKey(_panel));
+        await tester.tap(find.text('回報現場狀況'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('送出回報'), findsOneWidget);
+        // The route's panel: the last one, over the details.
+        final sheet = tester.getRect(
+          find.byKey(const ValueKey('side-panel')).last,
+        );
+        expect(sheet, detail);
+        final barrier = tester.widget<ModalBarrier>(
+          find.byType(ModalBarrier).last,
+        );
+        expect(barrier.color, const Color(0x6116313a));
+        // Not a sheet across the window.
+        expect(
+          tester.getSize(find.byType(SightingSheet)).width,
+          sidePanelWidth,
+        );
+        // Everything in it stays inside the panel.
+        final send = tester.getRect(find.text('送出回報'));
+        expect(send.left, greaterThanOrEqualTo(sheet.left));
+        expect(send.right, lessThanOrEqualTo(sheet.right));
+        // The scrim closes it; the details are still there.
+        await tester.tapAt(Offset(size.width - 20, size.height / 2));
+        await tester.pumpAndSettle();
+        expect(find.text('送出回報'), findsNothing);
+        expect(find.byKey(_panel), findsOneWidget);
+        // And so does back.
+        await tester.tap(find.text('回報現場狀況'));
+        await tester.pumpAndSettle();
+        expect(find.text('送出回報'), findsOneWidget);
+        await tester.binding.handlePopRoute();
+        await tester.pumpAndSettle();
+        expect(find.text('送出回報'), findsNothing);
+        expect(find.byKey(_panel), findsOneWidget);
+      }, variant: _platforms);
+    }
+
+    for (final (scale, brightness) in [
+      (1.3, Brightness.dark),
+      (2.0, Brightness.light),
+    ]) {
+      testWidgets('平板 1180×820 字級 $scale ${brightness.name}：不溢位，送出鍵捲得到', (
+        tester,
+      ) async {
+        final store = await _store(tester);
+        await _pumpApp(
+          tester,
+          store,
+          size: const Size(1180, 820),
+          scale: scale,
+          brightness: brightness,
+        );
+        await _openFirst(tester);
+        await tester.ensureVisible(find.text('回報現場狀況'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('回報現場狀況'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('送出回報'));
+        await tester.pumpAndSettle();
+        expect(tester.takeException(), isNull);
+        expect(find.text('送出回報').hitTestable(), findsOneWidget);
+      }, variant: _platforms);
+    }
+
+    testWidgets('手機：照舊從底部升起，佔滿寬度', (tester) async {
+      final store = await _store(tester);
+      await _pumpApp(tester, store, size: const Size(390, 844));
+      await _openFirst(tester);
+      await tester.tap(find.text('回報現場狀況'));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('side-panel')), findsNothing);
+      final sheet = tester.getRect(find.byType(SightingSheet));
+      expect(sheet.width, 390);
+      expect(sheet.top, greaterThan(844 / 3));
+    }, variant: _platforms);
+  });
+
   group('分頁', () {
     for (final size in _tablets) {
       testWidgets('Android 平板 ${size.width.toInt()}×${size.height.toInt()}：'
           '左側導覽軌，沒有底部分頁列，面板排在導覽軌之後', (tester) async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.android;
         final store = await _store(tester);
         await _pumpApp(tester, store, size: size);
         expect(tester.takeException(), isNull);
@@ -432,6 +661,20 @@ void main() {
         final map = tester.getRect(find.byType(MapPage));
         expect(map.left, tabletRailWidth);
         expect(map.bottom, size.height);
+        // T1 Android: beside the rail an upright tablet gives the filters
+        // the whole width and puts the legend button under them; on its
+        // side the button ends their row (T2).
+        final filters = tester.getRect(find.byKey(_filters));
+        final legend = tester.getRect(find.byKey(_legend));
+        expect(filters.left, tabletRailWidth + 16 + sidePanelWidth + 12);
+        if (size.height > size.width) {
+          expect(filters.right, size.width);
+          expect(legend.top, greaterThan(filters.bottom));
+        } else {
+          expect(legend.left, greaterThanOrEqualTo(filters.right + 12));
+          expect(legend.top, lessThan(filters.bottom));
+        }
+        expect(legend.right, size.width - 16);
         await _openFirst(tester);
         final panel = tester.getRect(find.byKey(_panel));
         expect(panel.left, tabletRailWidth + 16);
@@ -443,10 +686,12 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byKey(_panel), findsNothing);
         final tab = tester.getRect(
-          find.descendant(
-            of: find.byType(MapPanel),
-            matching: find.byKey(const ValueKey('side-panel')),
-          ),
+          find
+              .descendant(
+                of: find.byType(MapPanel),
+                matching: find.byKey(const ValueKey('side-panel')),
+              )
+              .hitTestable(),
         );
         expect(tab.left, tabletRailWidth + 16);
         expect(tab.width, sidePanelWidth);
@@ -455,12 +700,10 @@ void main() {
         await tester.tap(find.text('探索'));
         await tester.pumpAndSettle();
         expect(find.byType(MapPanel).hitTestable(), findsNothing);
-        debugDefaultTargetPlatformOverride = null;
-      });
+      }, variant: TargetPlatformVariant.only(TargetPlatform.android));
 
       testWidgets('iPad ${size.width.toInt()}×${size.height.toInt()}：'
           '分頁列膠囊在面板欄底部，面板底色在它後面', (tester) async {
-        debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
         final store = await _store(tester);
         await _pumpApp(tester, store, size: size);
         expect(tester.takeException(), isNull);
@@ -475,6 +718,18 @@ void main() {
         final map = tester.getRect(find.byType(MapPage));
         expect(map.left, 0);
         expect(map.bottom, size.height);
+        // T1, T2 iPad: the legend button ends the filters' row.
+        final filters = tester.getRect(find.byKey(_filters));
+        final legend = tester.getRect(find.byKey(_legend));
+        expect(filters.left, 16 + sidePanelWidth + 16);
+        expect(legend.left, greaterThanOrEqualTo(filters.right + 12));
+        expect(legend.right, size.width - 16);
+        // The bar's strip leaves the map's own actions to the touch.
+        expect(find.byType(MapAction).first.hitTestable(), findsOneWidget);
+        expect(
+          tester.getRect(find.byType(MapActions)).bottom,
+          size.height - 28,
+        );
         await _openFirst(tester);
         expect(tester.takeException(), isNull);
         final panel = tester.getRect(find.byKey(_panel));
@@ -493,16 +748,17 @@ void main() {
         expect(tester.takeException(), isNull);
         expect(find.byKey(_panel), findsNothing);
         final tab = tester.getRect(
-          find.descendant(
-            of: find.byType(MapPanel).hitTestable(),
-            matching: find.byKey(const ValueKey('side-panel')),
-          ),
+          find
+              .descendant(
+                of: find.byType(MapPanel),
+                matching: find.byKey(const ValueKey('side-panel')),
+              )
+              .hitTestable(),
         );
         expect(tab.left, 16);
         expect(tab.width, sidePanelWidth);
         expect(tab.bottom, size.height);
-        debugDefaultTargetPlatformOverride = null;
-      });
+      }, variant: TargetPlatformVariant.only(TargetPlatform.iOS));
     }
 
     for (final size in [..._phones, ..._splits]) {
@@ -531,6 +787,8 @@ void main() {
       _size(tester, size);
       await tester.pumpWidget(
         MaterialApp(
+          // ignore: deprecated_member_use
+          builder: (_, child) => MaterialUiCompatibilityBridge(child: child!),
           home: Scaffold(
             body: Builder(
               builder: (context) => TextButton(

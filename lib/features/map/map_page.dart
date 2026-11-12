@@ -52,6 +52,10 @@ bool mapInteractive({
 bool sheetBarBacking({required double tabBarInset, required Size screen}) =>
     tabBarInset > 0 && !isTabletSize(screen);
 
+/// The least room the tablet's filters keep beside the legend button
+/// before the button moves under them.
+const tabletFilterMinWidth = 260.0;
+
 class MapPage extends ConsumerStatefulWidget {
   const MapPage({super.key, this.showControls = true, this.covered = false});
   final bool showControls;
@@ -147,12 +151,6 @@ class _MapPageState extends ConsumerState<MapPage> {
   /// The spot sheet sits on the root overlay, over the tab bar as in map
   /// apps, while the rest of the map still takes gestures.
   final sheetPortal = OverlayPortalController()..show();
-
-  /// The open spot's sheet, one key per spot: the same state moves between
-  /// the phone's overlay and the tablet's side panel when the window
-  /// crosses the tablet width (a rotation, Split View) and keeps its
-  /// scroll and the chosen segment.
-  GlobalKey sheetKey = GlobalKey(debugLabel: 'spot-sheet');
 
   /// Kept for dispose, where `ref` can no longer be read.
   late final launchStore = ref.read(storeProvider);
@@ -417,7 +415,6 @@ class _MapPageState extends ConsumerState<MapPage> {
     if (selected?.id != spot.id) {
       sheetPeek = spotSheetPeek;
       recenterOnPeek = true;
-      sheetKey = GlobalKey(debugLabel: 'spot-sheet');
     }
     setState(() => selected = spot);
     unawaited(
@@ -664,6 +661,9 @@ class _MapPageState extends ConsumerState<MapPage> {
         filtered: filtered,
         searchHeight: searchHeight,
         filterHeight: filterHeight,
+        pageWidth: constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : MediaQuery.sizeOf(context).width,
         open: open,
         covered: covered,
       ),
@@ -686,6 +686,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     required bool filtered,
     required double searchHeight,
     required double filterHeight,
+    required double pageWidth,
     required ParkingSpot? open,
     required bool covered,
   }) {
@@ -721,7 +722,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       context: overlay,
                       removeBottom: barInset > 0,
                       child: SpotSheet(
-                        key: sheetKey,
+                        key: ValueKey(open.id),
                         store: store,
                         spot: open,
                         onClose: _closeSpot,
@@ -749,6 +750,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               filtered: filtered,
               searchHeight: searchHeight,
               filterHeight: filterHeight,
+              pageWidth: pageWidth,
               open: open,
             ),
             // Under the floating tab bar, the sheet's own ground runs to the
@@ -793,6 +795,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     required bool filtered,
     required double searchHeight,
     required double filterHeight,
+    required double pageWidth,
     required ParkingSpot? open,
   }) {
     final openCapsules = open == null
@@ -802,9 +805,14 @@ class _MapPageState extends ConsumerState<MapPage> {
     // The tablet's top row and the map's own column, right of the panel's.
     final top = mapSearchTop(context);
     final legendSize = isCupertino ? 44.0 : 48.0;
-    const mapLeft = sidePanelGutter + sidePanelWidth + sidePanelGutter;
-    final window = MediaQuery.sizeOf(context);
-    final legendBeside = isCupertino || window.width > window.height;
+    // 16 after the panel on iPad, 12 on Android (T1, T2).
+    final mapLeft =
+        sidePanelGutter + sidePanelWidth + (isCupertino ? 16.0 : 12.0);
+    // The legend button ends the filters' row while that leaves them room
+    // (T1 iPad: 312; T2); otherwise the filters take the whole width and
+    // the button goes under them (T1 Android, beside the rail: 236).
+    final legendBeside =
+        pageWidth - mapLeft - (16 + legendSize + 12) >= tabletFilterMinWidth;
     final rowBottom = top + math.max(searchHeight, filterHeight);
     // The tablet's map actions sit at the window's foot (T1, T2: 28), not
     // above the tab bar: that is in the panel column or on the rail.
@@ -1391,7 +1399,7 @@ class _MapPageState extends ConsumerState<MapPage> {
               SidePanelSlot(
                 key: const ValueKey('spot-side-panel'),
                 child: SpotSheet(
-                  key: sheetKey,
+                  key: ValueKey(open.id),
                   store: store,
                   spot: open,
                   onClose: _closeSpot,

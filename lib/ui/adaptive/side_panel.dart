@@ -171,21 +171,28 @@ class SidePanelRoute<T> extends PopupRoute<T> {
     children: [
       SidePanelSlot(
         left: sidePanelWindowLeft(context),
-        child: SidePanel(
-          // The window's own insets hold inside the panel: the keyboard
-          // and the home indicator.
-          child: MediaQuery.removePadding(
-            context: context,
-            removeTop: true,
-            removeLeft: true,
-            removeRight: true,
-            child: Column(
-              children: [
-                const SidePanelGrabber(),
-                // As a bottom sheet does: the content ends above the
-                // home indicator.
-                Expanded(child: SafeArea(top: false, child: builder(context))),
-              ],
+        // A route of its own for assistive technology, as a sheet is.
+        child: Semantics(
+          scopesRoute: true,
+          explicitChildNodes: true,
+          child: SidePanel(
+            // The window's own insets hold inside the panel: the keyboard
+            // and the home indicator.
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              removeLeft: true,
+              removeRight: true,
+              child: Column(
+                children: [
+                  const SidePanelGrabber(),
+                  // As a bottom sheet does: the content ends above the
+                  // home indicator.
+                  Expanded(
+                    child: SafeArea(top: false, child: builder(context)),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

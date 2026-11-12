@@ -123,11 +123,18 @@ void main() {
   });
 
   for (final size in const [Size(820, 1180), Size(1180, 820)]) {
-    testWidgets('平板 ${size.width.toInt()}：不畫底色，版面不變', (tester) async {
+    testWidgets('平板 ${size.width.toInt()}：詳情在左側面板，不畫底色', (tester) async {
       debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
       final store = await mapStore(tester);
       await pumpMap(tester, store, size: size);
-      await openSpot(tester);
+      // T1, T2: the panel runs to the bottom itself, behind the tab bar.
+      await tester.tap(find.byType(SpotMarker).first, warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('spot-sheet-overlay')), findsNothing);
+      expect(
+        tester.getRect(find.byKey(const ValueKey('spot-side-panel'))).bottom,
+        size.height,
+      );
       expect(find.byKey(backing), findsNothing);
       expect(tester.takeException(), isNull);
       debugDefaultTargetPlatformOverride = null;

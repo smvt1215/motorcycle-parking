@@ -37,6 +37,11 @@ Future<AppStore> clusterStore(int count) async {
 }
 
 Future<AppStore> mountClusterMap(WidgetTester tester, int count) async {
+  // The phone layout; a tablet-size window gets the side panel layout
+  // (tablet_layout_test).
+  tester.view.devicePixelRatio = 1;
+  tester.view.physicalSize = const Size(390, 844);
+  addTearDown(tester.view.reset);
   final store = (await tester.runAsync(() => clusterStore(count)))!;
   await tester.pumpWidget(
     ProviderScope(

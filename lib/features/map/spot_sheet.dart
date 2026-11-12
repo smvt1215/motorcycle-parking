@@ -351,9 +351,6 @@ class _SpotSheetState extends State<SpotSheet> {
   @override
   void didUpdateWidget(SpotSheet old) {
     super.didUpdateWidget(old);
-    // The window crossed the tablet width (a rotation, Split View): the
-    // sheet opens at rest again, the panel at its top.
-    if (old.panel != widget.panel) full = false;
     if (old.spot.id != widget.spot.id) {
       reread = null;
       unawaited(_reread());
@@ -445,6 +442,8 @@ class _SpotSheetState extends State<SpotSheet> {
       spied = panelScroll..addListener(spy);
     }
     return SidePanel(
+      // The same handle as the sheet: one name for the open spot's details.
+      key: const ValueKey('parking-spot-sheet'),
       semanticLabel: '停車點詳情',
       child: AnimatedBuilder(
         animation: store,

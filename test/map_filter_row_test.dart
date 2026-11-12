@@ -139,9 +139,15 @@ void main() {
             find.descendant(of: chip, matching: find.text(labels[i])),
             findsOneWidget,
           );
-          final rect = tester.getRect(chip);
-          expect(rect.height, minHeight);
-          expect(rect.right, lessThanOrEqualTo(size.width));
+          expect(tester.getRect(chip).height, minHeight);
+          // T1 Android: beside the rail and the panel column an upright
+          // tablet leaves the row 312 wide, so it scrolls to the third.
+          if (platform == TargetPlatform.android &&
+              size == const Size(820, 1180)) {
+            await tester.ensureVisible(chip);
+            await tester.pumpAndSettle();
+          }
+          expect(tester.getRect(chip).right, lessThanOrEqualTo(size.width));
           expect(chip.hitTestable(), findsOneWidget);
         }
         expect(

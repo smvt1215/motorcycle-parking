@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' show Size;
 
 import 'package:flutter/foundation.dart'
     show TargetPlatform, debugDefaultTargetPlatformOverride;
@@ -265,6 +266,11 @@ void main() {
 
     for (final platform in [TargetPlatform.iOS, TargetPlatform.android]) {
       testWidgets('警示列顯示快取提示（${platform.name}）', (tester) async {
+        // The phone layout; a tablet-size window gets the side panel layout
+        // (tablet_layout_test).
+        tester.view.devicePixelRatio = 1;
+        tester.view.physicalSize = const Size(390, 844);
+        addTearDown(tester.view.reset);
         debugDefaultTargetPlatformOverride = platform;
         addTearDown(() => debugDefaultTargetPlatformOverride = null);
         writeCache(cacheJson([rule('臺北市', 'heavy', 5, '快取費率')]));
