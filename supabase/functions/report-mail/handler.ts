@@ -7,6 +7,7 @@
 // 202611021100_content_reports.sql); a notice not sent waits for the next.
 import { response } from '../_shared/http.ts';
 import { sameSecret } from '../account-deletion/handler.ts';
+import { ResendError } from '../support-request/resend.ts';
 
 /** Notices sent per call; the rest wait for the next. */
 export const batchSize = 50;
@@ -73,22 +74,44 @@ export async function handle(req: Request, deps: Deps): Promise<Response> {
  * project still set up with ADMIN_REVIEW_URL (https://<admin>/review) keeps
  * sending, the same site's /pending. Hosting serves 待處理 at /pending on
  * the admin origin (firebase.json, admin_web/react/vite.config.ts). Null when
- * neither is a usable URL: nothing is sent and the notices wait.
+ * the one in use is not an http(s) URL, or ADMIN_PENDING_URL has a query or
+ * a fragment (the case id could not follow it): nothing is sent and the
+ * notices wait, as with no link set.
  */
 export function pendingBase(
   env: (name: string) => string | undefined,
 ): string | null {
-  const pending = env('ADMIN_PENDING_URL')?.trim().replace(/\/+$/, '');
-  if (pending) return pending;
+  const pending = env('ADMIN_PENDING_URL')?.trim();
+  if (pending) {
+    const url = webUrl(pending);
+    if (!url || pending.includes('?') || pending.includes('#')) return null;
+    return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+  }
   const review = env('ADMIN_REVIEW_URL')?.trim();
-  if (!review) return null;
+  const url = review ? webUrl(review) : null;
+  return url ? `${url.origin}/pending` : null;
+}
+
+function webUrl(value: string): URL | null {
   try {
-    const url = new URL(review);
-    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-    return `${url.origin}/pending`;
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? url : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * Resend already took a mail under this notice's key within 24 hours, with
+ * other text: the link follows the case at send time, so a retry after an
+ * unmarked send can differ (the case was resolved, or a deploy changed the
+ * link). The notice went out, so it is marked sent rather than failing every
+ * run and going out again once the key expires. A concurrent send under the
+ * same key (concurrent_idempotent_requests) is still a failure, retried.
+ */
+export function alreadySent(error: unknown): boolean {
+  return error instanceof ResendError && error.status === 409 &&
+    error.code === 'invalid_idempotent_request';
 }
 
 /** The case's page; the list when the report is no longer in an open case. */

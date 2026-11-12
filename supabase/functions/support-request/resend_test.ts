@@ -9,6 +9,7 @@ import {
   receiptMail,
   replyMail,
   resendConfig,
+  ResendError,
   resendNotifier,
   resendSender,
   resendUrl,
@@ -343,4 +344,35 @@ Deno.test('the receipt of a mail to support@ points identity requests to the for
     'form',
   );
   equal(identity.includes('登入 email'), true, 'the login email decides');
+});
+
+Deno.test('a refused send keeps its message; a 409 says which one', async () => {
+  const refused = async (res: Response) => {
+    try {
+      await sendMail(
+        config,
+        { to: ['ops@x.tw'], subject: 's', text: 't' },
+        'k',
+        () => Promise.resolve(res),
+      );
+    } catch (e) {
+      return e;
+    }
+    throw new Error('not refused');
+  };
+  const server = await refused(new Response('down', { status: 500 }));
+  equal(server instanceof ResendError, true, '500 type');
+  equal((server as ResendError).message, 'resend 500', '500 message');
+  equal((server as ResendError).code, null, '500 code not read');
+  const reused = await refused(
+    Response.json({
+      statusCode: 409,
+      name: 'invalid_idempotent_request',
+      message: 'changed body',
+    }, { status: 409 }),
+  );
+  equal((reused as ResendError).message, 'resend 409', '409 message');
+  equal((reused as ResendError).code, 'invalid_idempotent_request', 'code');
+  const unreadable = await refused(new Response('x', { status: 409 }));
+  equal((unreadable as ResendError).code, null, 'no JSON: no code');
 });

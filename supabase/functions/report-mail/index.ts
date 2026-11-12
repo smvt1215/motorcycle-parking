@@ -2,6 +2,7 @@ import { createClient } from 'npm:@supabase/supabase-js@2.108.1';
 import { response } from '../_shared/http.ts';
 import { resendConfig, sendMail } from '../support-request/resend.ts';
 import {
+  alreadySent,
   caseLink,
   fuseNoticeMail,
   handle,
@@ -36,12 +37,16 @@ Deno.serve((req) => {
       if (!config || !base) return false;
       const { id, kind } = notice;
       const mail = kind === 'fuse' ? fuseNoticeMail : reportNoticeMail;
-      await sendMail(
-        config,
-        { to: config.to, ...mail(id, caseLink(base, notice)) },
-        // A retry of the same notice is not sent twice (kept 24 hours).
-        `content-report/${kind}/${id}`,
-      );
+      try {
+        await sendMail(
+          config,
+          { to: config.to, ...mail(id, caseLink(base, notice)) },
+          // A retry of the same notice is not sent twice (kept 24 hours).
+          `content-report/${kind}/${id}`,
+        );
+      } catch (error) {
+        if (!alreadySent(error)) throw error;
+      }
       return true;
     },
     async sent({ id, kind }) {

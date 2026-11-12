@@ -1,4 +1,6 @@
+import { ResendError } from '../support-request/resend.ts';
 import {
+  alreadySent,
   batchSize,
   caseLink,
   type Deps,
@@ -175,4 +177,47 @@ Deno.test("ADMIN_PENDING_URL, else the review site's /pending", () => {
     null,
     'not a web link',
   );
+});
+
+Deno.test('a bad ADMIN_PENDING_URL sends nothing, as with none set', () => {
+  const env = (vars: Record<string, string>) => (name: string) => vars[name];
+  for (
+    const bad of [
+      'admin.test/pending',
+      'ftp://admin.test/pending',
+      'https://admin.test/pending?a=1',
+      'https://admin.test/pending?',
+      'https://admin.test/pending#x',
+    ]
+  ) {
+    eq(
+      pendingBase(env({
+        ADMIN_PENDING_URL: bad,
+        ADMIN_REVIEW_URL: 'https://admin.test/review',
+      })),
+      null,
+      bad,
+    );
+  }
+  eq(
+    pendingBase(env({ ADMIN_PENDING_URL: 'https://Admin.test/pending//' })),
+    'https://admin.test/pending',
+    'normalised',
+  );
+});
+
+Deno.test('a key already used with other text counts as sent', () => {
+  eq(
+    alreadySent(new ResendError(409, 'invalid_idempotent_request')),
+    true,
+    'the mail went out before',
+  );
+  eq(
+    alreadySent(new ResendError(409, 'concurrent_idempotent_requests')),
+    false,
+    'still running: retried',
+  );
+  eq(alreadySent(new ResendError(409)), false, 'unknown 409');
+  eq(alreadySent(new ResendError(500)), false, 'server error');
+  eq(alreadySent(new Error('invalid_idempotent_request')), false, 'other');
 });
