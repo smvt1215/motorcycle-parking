@@ -659,6 +659,50 @@ describe('案件詳情的處理', () => {
     expect(await screen.findByRole('button', { name: '再寄一次' })).toBeInTheDocument();
   });
 
+  it('keeps following a failed send the server will retry until it is sent', async () => {
+    const first = supportDetail(row(1)).messages[0]!;
+    const out = {
+      ...first,
+      id: 'm1',
+      direction: 'out' as const,
+      channel: 'admin' as const,
+      delivery_status: 'failed' as const,
+      attempts: 1,
+      to_email: 'rider@example.com',
+    };
+    const setup: Setup = { items: [row(1)], messages: [first, out] };
+    const { postgrest, calls } = backend(setup);
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText(/沒有寄出，系統已試了/)).toBeInTheDocument();
+    const reads = () => calls.filter((c) => c.url === 'support_request').length;
+    // The server's automatic retry succeeds while the case is open.
+    setup.messages = [first, { ...out, delivery_status: 'sent', attempts: 2 }];
+    await tick(61_000);
+    expect(await screen.findByText(/已寄到 rider@example.com/)).toBeInTheDocument();
+    // Sent is final: no more reads.
+    const settled = reads();
+    await tick(61_000);
+    expect(reads()).toBe(settled);
+  });
+
+  it('does not keep reading a send that has used up its retries', async () => {
+    const first = supportDetail(row(1)).messages[0]!;
+    const setup: Setup = {
+      items: [row(1)],
+      messages: [
+        first,
+        { ...first, id: 'm1', direction: 'out', channel: 'admin', delivery_status: 'failed', attempts: 5 },
+      ],
+    };
+    const { postgrest, calls } = backend(setup);
+    open(postgrest, `/pending/${UUID(1)}`);
+    expect(await screen.findByText(/沒有寄出，系統已試了/)).toBeInTheDocument();
+    const reads = () => calls.filter((c) => c.url === 'support_request').length;
+    const before = reads();
+    await tick(61_000);
+    expect(reads()).toBe(before);
+  });
+
   it('does not bring back a stale reply that a later reply replaced', async () => {
     const first = supportDetail(row(1)).messages[0]!;
     const { postgrest } = backend({

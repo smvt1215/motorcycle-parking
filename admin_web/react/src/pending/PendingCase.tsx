@@ -43,6 +43,10 @@ import './Case.css';
 const FOREIGN_POLL_MS = 2_000;
 /** support_outbound_result lands after the action is done: follow the mail too. */
 const DELIVERY_POLL_MS = 5_000;
+/** A failed send under 5 attempts is tried again by the server after 15 minutes. */
+const DELIVERY_RETRY_POLL_MS = 60_000;
+/** support_outbound_claim stops retrying at this many attempts. */
+const DELIVERY_MAX_ATTEMPTS = 5;
 
 type PanelName = 'resolve' | 'confirm-resolve' | 'restore' | 'keep' | 'edit' | null;
 
@@ -638,21 +642,26 @@ function CaseLoader({ caseId }: { caseId: string }) {
   } as const;
   const row = useAdminV1TimedCaseQuery({ body: { p_id: caseId } }, options);
   const item = row.currentData;
-  // A reply handed to the mail service: read until it is sent or has failed.
-  const deliveringNow = useAppSelector(
-    (state) =>
-      adminV1.endpoints.adminV1SupportRequest
-        .select({ body: { p_id: caseId } })(state)
-        .data?.messages.some(
-          (m) => m.direction === 'out' && (m.delivery_status === 'queued' || m.delivery_status === 'sending'),
-        ) === true,
-  );
+  // A reply handed to the mail service: read until it is sent or the server
+  // stops retrying. A failed send under the attempt limit is not final.
+  const deliveryPoll = useAppSelector((state) => {
+    const out = (
+      adminV1.endpoints.adminV1SupportRequest.select({ body: { p_id: caseId } })(state).data?.messages ?? []
+    ).filter((m) => m.direction === 'out');
+    if (out.some((m) => m.delivery_status === 'queued' || m.delivery_status === 'sending')) {
+      return DELIVERY_POLL_MS;
+    }
+    if (out.some((m) => m.delivery_status === 'failed' && m.attempts < DELIVERY_MAX_ATTEMPTS)) {
+      return DELIVERY_RETRY_POLL_MS;
+    }
+    return 0;
+  });
   const support = useAdminV1SupportRequestQuery(
     { body: { p_id: caseId } },
     {
       ...options,
       skip: item?.type !== 'support',
-      pollingInterval: deliveringNow ? DELIVERY_POLL_MS : 0,
+      pollingInterval: deliveryPoll,
     },
   );
   const report = useAdminV1ContentReportQuery(
@@ -672,7 +681,7 @@ function CaseLoader({ caseId }: { caseId: string }) {
     {
       ...options,
       skip: !item,
-      pollingInterval: foreign > 0 ? FOREIGN_POLL_MS : deliveringNow ? DELIVERY_POLL_MS : 0,
+      pollingInterval: foreign > 0 ? FOREIGN_POLL_MS : deliveryPoll,
     },
   );
 
