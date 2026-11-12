@@ -6,9 +6,15 @@ import { sessionSlice } from '../auth/sessionSlice';
 export interface StoreOptions {
   /** The API, or null when the build has no backend configured. */
   postgrest: PostgrestConnection | null;
+  /**
+   * How the store queues its batched subscriber notifications. Omit it for
+   * RTK's default (requestAnimationFrame with a 100 ms timer as fallback).
+   * Tests pass 'tick' so no timer outlives the jsdom environment.
+   */
+  autoBatch?: 'tick';
 }
 
-export function makeStore({ postgrest }: StoreOptions) {
+export function makeStore({ postgrest, autoBatch }: StoreOptions) {
   return configureStore({
     reducer: {
       [apiV1Base.reducerPath]: apiV1Base.reducer,
@@ -16,6 +22,8 @@ export function makeStore({ postgrest }: StoreOptions) {
     },
     middleware: (getDefault) =>
       getDefault({ thunk: { extraArgument: { postgrest } } }).concat(apiV1Base.middleware),
+    enhancers: (getDefaultEnhancers) =>
+      getDefaultEnhancers(autoBatch ? { autoBatch: { type: autoBatch } } : {}),
   });
 }
 
