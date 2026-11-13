@@ -310,6 +310,31 @@ void main() {
     expect(device.requests, 0);
   });
 
+  testWidgets('第一次啟動時定位服務關閉：看過圖例後，第一次按定位仍先說明', (tester) async {
+    final device = FakeLocationDevice()..service = false;
+    final store = (await tester.runAsync(() => storeWith(device)))!;
+    final started = await startReal(tester, store);
+    await pumpApp(tester, store);
+    await tester.runAsync(() => started.done);
+    await tester.pumpAndSettle();
+    expect(find.text('定位服務未開啟'), findsOneWidget);
+    await tester.tap(find.text('稍後'));
+    await tester.pumpAndSettle();
+    await closeLegend(tester);
+    expect(store.local.legendSeen, isTrue);
+    expect(store.local.locationAsked, isFalse);
+
+    device.service = true;
+    await tester.tap(find.byKey(const ValueKey('locate-fab')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(card), findsOneWidget);
+    expect(device.requests, 0);
+    await tester.tap(find.byKey(continueKey));
+    await tester.pumpAndSettle();
+    expect(device.requests, 1);
+    expect(store.located, isTrue);
+  });
+
   testWidgets('回報選點按「移到我的位置」遇到還沒說明過時，先說明再要求', (tester) async {
     var calls = 0;
     var accepted = false;

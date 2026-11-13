@@ -759,6 +759,9 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     starting = locatingAtLaunch = true;
     introduceLegend = !local.legendSeen;
+    // SharedPreferences updates its cache before the write returns, so the
+    // launch below already reads the migrated value.
+    unawaited(local.migrateLocationAsked());
     listenForUpdates();
     unawaited(refreshAvailabilityBeta());
     final permission = _permissionSettled = Completer<void>();
