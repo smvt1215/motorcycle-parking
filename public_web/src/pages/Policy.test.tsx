@@ -53,6 +53,16 @@ describe('/privacy', () => {
     expect(within(first).getAllByRole('cell')[1]).toHaveTextContent(privacy.updated);
   });
 
+  it('describes the separate geocode quotas and pseudonymous SDK ids (#461)', () => {
+    open();
+    const main = screen.getByRole('main');
+    expect(main).not.toHaveTextContent('共用每日上限');
+    expect(main).not.toHaveTextContent('不會再查');
+    expect(main).toHaveTextContent('分開計算、互不影響');
+    expect(main).toHaveTextContent('假名化的 SDK 識別碼');
+    expect(main).not.toHaveTextContent('匿名的 SDK 識別碼');
+  });
+
   it('keeps addresses as text and links the site within the app (#295)', () => {
     open();
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
