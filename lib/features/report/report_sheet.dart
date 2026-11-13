@@ -7,6 +7,7 @@ import '../../domain/consent_display.dart';
 import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
+import '../../data/repositories.dart' show LookupConsent;
 import '../../domain/location_check.dart';
 import '../../domain/precheck.dart';
 import '../../models/fee.dart';
@@ -25,6 +26,7 @@ import 'entry_drafts.dart';
 import 'fee_forms.dart';
 import 'entry_pages.dart';
 import 'form_parts.dart';
+import 'lookup_consent.dart';
 import 'time_rules.dart';
 import 'time_rules_page.dart';
 
@@ -610,16 +612,29 @@ class _ReportFormState extends State<ReportForm> {
     lng = b;
     // The district belonged to the old position; never send it stale.
     district = '';
-    scheduleLookup();
+    // Nothing leaves the device until the rider agreed (#462).
+    if (autoLookup) scheduleLookup();
     approx?.moved(a, b);
   });
 
-  /// The door shown under the map; null where none may be shown.
+  /// The door shown under the map; null where none may be shown, and
+  /// until the rider agreed to the lookups.
   ApproxAddressController? approx;
 
-  @override
-  void initState() {
-    super.initState();
+  /// The rider agreed to the lookups (N1c, #462), here or in 帳號與設定;
+  /// kept to tell when the store's answer changes.
+  late bool autoLookup = widget.store.autoLookup;
+
+  /// 開啟自動查詢 brought the explanation back (N1d ③): still nothing is
+  /// looked up until 同意.
+  bool reasking = false;
+
+  /// The explanation takes the door row's place until it is answered.
+  bool get asksConsent =>
+      reasking || widget.store.lookupConsent == LookupConsent.undecided;
+
+  /// Looks the marker up at once, then after every move.
+  void _startLookups() {
     scheduleLookup(delay: Duration.zero);
     if (widget.store.approxAddressEnabled) {
       approx = ApproxAddressController(
@@ -632,8 +647,50 @@ class _ReportFormState extends State<ReportForm> {
     }
   }
 
+  /// Ends the lookups, with any still waiting or in flight; what they
+  /// already filled in stays.
+  void _stopLookups() {
+    lookupTimer?.cancel();
+    lookupRound++;
+    lookingUp = false;
+    lookupProblem = null;
+    approx?.dispose();
+    approx = null;
+  }
+
+  /// The answer changed, here or in 帳號與設定: follow it at once.
+  void _consentChanged() {
+    final now = widget.store.autoLookup;
+    if (now == autoLookup || !mounted) return;
+    setState(() {
+      autoLookup = now;
+      reasking = false;
+      now ? _startLookups() : _stopLookups();
+    });
+  }
+
+  /// 同意，自動查詢 or 不同意，自己選 on the explanation.
+  void answerLookup(LookupConsent answer) {
+    setState(() => reasking = false);
+    unawaited(widget.store.setLookupConsent(answer));
+  }
+
+  /// 關閉自動查詢: at once, without asking again.
+  void turnOffLookup() {
+    unawaited(widget.store.setLookupConsent(LookupConsent.declined));
+    showLookupTurnedOff(context);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    widget.store.addListener(_consentChanged);
+    if (autoLookup) _startLookups();
+  }
+
   @override
   void dispose() {
+    widget.store.removeListener(_consentChanged);
     lookupTimer?.cancel();
     approx?.dispose();
     name.dispose();
@@ -837,7 +894,15 @@ class _ReportFormState extends State<ReportForm> {
           ],
         ),
       ),
-      if (approx case final approx?) ...[
+      if (asksConsent) ...[
+        const SizedBox(height: 8),
+        LookupConsentCard(
+          doorAvailable: widget.store.approxAddressEnabled,
+          signedIn: widget.store.canReport,
+          onDecline: () => answerLookup(LookupConsent.declined),
+          onAgree: () => answerLookup(LookupConsent.granted),
+        ),
+      ] else if (approx case final approx?) ...[
         const SizedBox(height: 8),
         ApproxAddressRow(controller: approx),
       ],
@@ -858,11 +923,12 @@ class _ReportFormState extends State<ReportForm> {
         }),
         onDistrict: (v) => setState(() => district = v ?? ''),
       ),
-      const SizedBox(height: 6),
-      Text(
-        '依地圖位置自動帶入，可以改。',
-        style: TextStyle(fontSize: 13, color: colors.onSurfaceVariant),
-      ),
+      if (autoLookup)
+        LookupAutoRow(onTurnOff: turnOffLookup)
+      else if (!asksConsent) ...[
+        const SizedBox(height: 8),
+        LookupOffRow(onTurnOn: () => setState(() => reasking = true)),
+      ],
       if (lookingUp)
         const LocationNote(icon: Icons.travel_explore, text: '正在查詢所在縣市與行政區…')
       else if (lookupProblem != null)
