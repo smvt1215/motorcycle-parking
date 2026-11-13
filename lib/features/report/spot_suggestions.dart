@@ -10,7 +10,6 @@ import '../../data/account_suspended.dart';
 import '../../data/app_store.dart';
 import '../../data/repositories.dart' show LookupConsent;
 import '../../domain/location_check.dart';
-import '../../domain/lookup_consent_display.dart';
 import '../../domain/content_report_display.dart';
 import '../../domain/precheck.dart';
 import '../../domain/suggestion_display.dart';
@@ -1159,7 +1158,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   /// 關閉自動查詢: at once, without asking again.
   void turnOffLookup() {
     unawaited(widget.store.setLookupConsent(LookupConsent.declined));
-    showMessage(context, lookupTurnedOff);
+    showLookupTurnedOff(context);
   }
 
   @override

@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/semantics.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/policy_links.dart';
@@ -288,6 +291,20 @@ class _Choices extends StatelessWidget {
 }
 
 double _max(double a, double b) => a > b ? a : b;
+
+/// Says 已關閉自動查詢 once 關閉自動查詢 took effect. A form sheet covers the
+/// page's messages, so it is spoken too; what shows is the row under the
+/// county turning into [LookupOffRow].
+void showLookupTurnedOff(BuildContext context) {
+  showMessage(context, lookupTurnedOff);
+  unawaited(
+    SemanticsService.sendAnnouncement(
+      View.of(context),
+      lookupTurnedOff,
+      Directionality.of(context),
+    ),
+  );
+}
 
 /// Under the county and district while the lookups are on (N1d ①②): the
 /// usual hint, with 關閉自動查詢 at its right, or on the next line when

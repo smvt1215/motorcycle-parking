@@ -492,6 +492,11 @@ void main() {
         expect(_saved(store), 'declined');
         expect(find.byType(AlertDialog), findsNothing);
         expect(find.text(lookupTurnedOff), findsOneWidget);
+        // Spoken too: the form sheet covers the page's messages.
+        expect(
+          tester.takeAnnouncements(),
+          contains(isAccessibilityAnnouncement(lookupTurnedOff)),
+        );
         expect(_door, findsNothing);
         expect(find.text(lookupAutoHint), findsNothing);
         expect(_off, findsOneWidget);

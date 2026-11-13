@@ -9,7 +9,6 @@ import '../../core/town_lookup.dart';
 import '../../data/app_store.dart';
 import '../../data/repositories.dart' show LookupConsent;
 import '../../domain/location_check.dart';
-import '../../domain/lookup_consent_display.dart';
 import '../../domain/precheck.dart';
 import '../../models/fee.dart';
 import '../../models/parking.dart';
@@ -679,7 +678,7 @@ class _ReportFormState extends State<ReportForm> {
   /// 關閉自動查詢: at once, without asking again.
   void turnOffLookup() {
     unawaited(widget.store.setLookupConsent(LookupConsent.declined));
-    showMessage(context, lookupTurnedOff);
+    showLookupTurnedOff(context);
   }
 
   @override
