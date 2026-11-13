@@ -7,6 +7,7 @@ import '../../models/parking.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
+import '../../ui/text_wrap.dart';
 import 'spot_details.dart';
 
 /// 「650 m」, 「1.1 km」 (Main, A3).
@@ -91,7 +92,8 @@ class SpotPreview extends StatelessWidget {
                     ),
                     ?titleNote,
                     const SizedBox(height: 2),
-                    Text(
+                    // 臺北市中山區 stays on one line (#467).
+                    KeepGroupsText(
                       subtitle,
                       key: const ValueKey('spot-subtitle'),
                       style: text.bodySmall?.copyWith(
@@ -313,17 +315,17 @@ class SpotPreviewActions extends StatefulWidget {
   static double heightFor(BuildContext context) =>
       math.max(48.0, MediaQuery.textScalerOf(context).scale(20) + 28);
 
-  /// The labels' width together at the current text size.
+  /// The labels' width together at the current text size, in the style
+  /// the buttons set them in: its letter spacing alone adds a few points
+  /// to each label, enough to cut 導航到入口 at 411 points (#466).
   static double _labelsWidth(BuildContext context, List<String> labels) {
-    final size = MediaQuery.textScalerOf(context).scale(_labelSize);
+    final style = AdaptiveButton.measureStyle(context, labelSize: _labelSize);
     var total = 0.0;
     for (final label in labels) {
       final painter = TextPainter(
-        text: TextSpan(
-          text: label,
-          style: TextStyle(fontSize: size, fontWeight: FontWeight.w600),
-        ),
+        text: TextSpan(text: label, style: style),
         textDirection: TextDirection.ltr,
+        textScaler: MediaQuery.textScalerOf(context),
         maxLines: 1,
       )..layout();
       total += painter.width.ceilToDouble();

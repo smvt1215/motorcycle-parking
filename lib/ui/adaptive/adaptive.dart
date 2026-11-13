@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart'
@@ -48,6 +49,29 @@ class AdaptiveButton extends StatelessWidget {
   /// scaling, for a row that measures its own buttons (#414). Null keeps
   /// each platform's default.
   final double? sidePadding, labelSize;
+
+  /// The style to measure the label in at [labelSize], before text
+  /// scaling, for a row that measures its buttons (#466): the button's own
+  /// text style under it, with its font and letter spacing. On Android
+  /// that is the M3E small button's label style (labelMedium, 0.5 letter
+  /// spacing). On iOS it is the Cupertino action style with its tighter
+  /// spacing left out: the iOS 26 native button sets its label itself and
+  /// does not tighten Chinese, and measuring a little wide only slides the
+  /// row sooner, it never cuts a label.
+  static TextStyle measureStyle(BuildContext context, {double? labelSize}) {
+    if (isCupertino) {
+      final base = cu.CupertinoTheme.of(context).textTheme.actionTextStyle;
+      return base.merge(
+        TextStyle(
+          fontSize: labelSize,
+          letterSpacing: math.max(0, base.letterSpacing ?? 0),
+        ),
+      );
+    }
+    return M3ETheme.of(context).typeScale.labelMedium
+        .merge(TextStyle(fontSize: labelSize));
+  }
+
   @override
   Widget build(BuildContext context) {
     final side = sidePadding, size = labelSize;

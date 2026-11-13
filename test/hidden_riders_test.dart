@@ -439,6 +439,45 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byType(HiddenRidersPage), findsOneWidget);
       });
+
+      testWidgetsOn('${platform.name} #467 已登入：副標說已同步，登出後回到登入後才同步', (
+        tester,
+      ) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues(threeHidden());
+          final s = AppStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            null,
+            hiddenRidersAccount: FakeAccountList(),
+          );
+          await s.hiddenRiders.signedIn('rider-1');
+          return s;
+        }))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSettings(context, store),
+                  child: const Text('settings'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('settings'));
+        await tester.pumpAndSettle();
+        expect(store.hiddenRiders.followsAccount, isTrue);
+        expect(find.text(settingsHiddenRidersSyncedDetail), findsOneWidget);
+        expect(find.text(settingsHiddenRidersDetail), findsNothing);
+
+        await tester.runAsync(store.hiddenRiders.signedOut);
+        await tester.pumpAndSettle();
+        expect(find.text(settingsHiddenRidersDetail), findsOneWidget);
+        expect(find.text(settingsHiddenRidersSyncedDetail), findsNothing);
+        expect(tester.takeException(), isNull);
+      });
     }
   });
 
