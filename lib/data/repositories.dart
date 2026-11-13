@@ -253,9 +253,30 @@ class ReportRefused extends StateError {
   final Object? details;
 }
 
+/// Whether the picker forms may look the marker's position up by themselves
+/// (#462): the county and district at 國土測繪中心 and, signed in, the
+/// approximate door through Google.
+enum LookupConsent {
+  /// Never asked: the forms show the explanation and look nothing up.
+  undecided,
+  granted,
+  declined,
+}
+
 class LocalRepository {
   LocalRepository(this.prefs);
   final SharedPreferences prefs;
+
+  /// Kept on the device only, for every account and both picker forms; a
+  /// reinstall asks again.
+  LookupConsent get lookupConsent =>
+      switch (prefs.getString('locationLookupConsent')) {
+        'granted' => LookupConsent.granted,
+        'declined' => LookupConsent.declined,
+        _ => LookupConsent.undecided,
+      };
+  Future<void> setLookupConsent(LookupConsent value) =>
+      prefs.setString('locationLookupConsent', value.name);
   VehicleType get vehicle =>
       VehicleType.values.byName(prefs.getString('vehicle') ?? 'scooter');
   Future<void> setVehicle(VehicleType value) =>

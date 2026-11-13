@@ -357,7 +357,12 @@ void main() {
               await tester.ensureVisible(find.text(linkedSignInsRelayNote));
               await tester.pumpAndSettle();
               final privacy = find.text('隱私');
-              await tester.ensureVisible(privacy);
+              // At the bottom edge, so the note above it stays built: the page
+              // goes on below 隱私 (#462).
+              await Scrollable.ensureVisible(
+                tester.element(privacy),
+                alignment: 1,
+              );
               await tester.pumpAndSettle();
               expect(
                 tester.getBottomLeft(find.text(linkedSignInsRelayNote)).dy,
