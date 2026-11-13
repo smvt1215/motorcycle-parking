@@ -8,7 +8,9 @@ import '../../core/geo.dart';
 import '../../core/town_lookup.dart';
 import '../../data/account_suspended.dart';
 import '../../data/app_store.dart';
+import '../../data/repositories.dart' show LookupConsent;
 import '../../domain/location_check.dart';
+import '../../domain/lookup_consent_display.dart';
 import '../../domain/content_report_display.dart';
 import '../../domain/precheck.dart';
 import '../../domain/suggestion_display.dart';
@@ -33,6 +35,7 @@ import 'entry_drafts.dart';
 import 'entry_pages.dart';
 import 'fee_forms.dart';
 import 'form_parts.dart';
+import 'lookup_consent.dart';
 import 'report_sheet.dart';
 import 'time_rules_page.dart';
 
@@ -1048,15 +1051,27 @@ class _SuggestionFormState extends State<_SuggestionForm> {
       lng = b;
       newCity = null;
       newDistrict = '';
-      lookingUp = true;
       lookupProblem = null;
     });
     approx?.moved(a, b);
+    // Nothing leaves the device until the rider agreed (#462); the county
+    // and district are then the rider's to pick.
+    if (autoLookup) _lookUpTown();
+  }
+
+  /// Asks which county and district the marker is in, once it has rested
+  /// for [delay]; only the latest answer counts.
+  void _lookUpTown({Duration delay = const Duration(milliseconds: 600)}) {
+    final (a, b) = (lat, lng);
+    setState(() {
+      lookingUp = true;
+      lookupProblem = null;
+    });
     lookupTimer?.cancel();
     // Counted now, not when the timer fires: an answer still in flight for
     // the previous position must not land on this one.
     final round = ++lookupRound;
-    lookupTimer = Timer(const Duration(milliseconds: 600), () async {
+    lookupTimer = Timer(delay, () async {
       Town? town;
       try {
         town = await widget.store.townAt(a, b);
@@ -1087,10 +1102,22 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     lookupProblem = null;
   }
 
-  @override
-  void initState() {
-    super.initState();
-    if (locationField && widget.store.approxAddressEnabled) {
+  /// The rider agreed to the lookups (N1c, #462), here or in 帳號與設定;
+  /// kept to tell when the store's answer changes.
+  late bool autoLookup = widget.store.autoLookup;
+
+  /// 開啟自動查詢 brought the explanation back (N1d ③): still nothing is
+  /// looked up until 同意.
+  bool reasking = false;
+
+  /// The explanation takes the door row's place until it is answered.
+  bool get asksConsent =>
+      reasking || widget.store.lookupConsent == LookupConsent.undecided;
+
+  /// Looks the marker up at once, then after every move. Where the map
+  /// shows the spot, its county and district are already known.
+  void _startLookups() {
+    if (widget.store.approxAddressEnabled) {
       approx = ApproxAddressController(
         lookup: widget.store.approxAddressAt,
         auth: widget.store,
@@ -1099,6 +1126,48 @@ class _SuggestionFormState extends State<_SuggestionForm> {
         lng: lng,
       );
     }
+    if (lat != widget.spot.lat || lng != widget.spot.lng) {
+      _lookUpTown(delay: Duration.zero);
+    }
+  }
+
+  /// Ends the lookups, with any still waiting or in flight; what they
+  /// already filled in stays.
+  void _stopLookups() {
+    _stopLookup();
+    approx?.dispose();
+    approx = null;
+  }
+
+  /// The answer changed, here or in 帳號與設定: follow it at once.
+  void _consentChanged() {
+    final now = widget.store.autoLookup;
+    if (now == autoLookup || !mounted) return;
+    setState(() {
+      autoLookup = now;
+      reasking = false;
+      now ? _startLookups() : _stopLookups();
+    });
+  }
+
+  /// 同意，自動查詢 or 不同意，自己選 on the explanation.
+  void answerLookup(LookupConsent answer) {
+    setState(() => reasking = false);
+    unawaited(widget.store.setLookupConsent(answer));
+  }
+
+  /// 關閉自動查詢: at once, without asking again.
+  void turnOffLookup() {
+    unawaited(widget.store.setLookupConsent(LookupConsent.declined));
+    showMessage(context, lookupTurnedOff);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    if (!locationField) return;
+    widget.store.addListener(_consentChanged);
+    if (autoLookup) _startLookups();
   }
 
   /// Lots also say how they are built; who parks there is each zone's.
@@ -1347,6 +1416,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
 
   @override
   void dispose() {
+    if (locationField) widget.store.removeListener(_consentChanged);
     lookupTimer?.cancel();
     approx?.dispose();
     note.dispose();
@@ -1729,7 +1799,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           text: state.errorText!,
                           tone: NoteTone.error,
                         ),
-                      if (approx case final approx?) ...[
+                      if (asksConsent) ...[
+                        const SizedBox(height: 8),
+                        LookupConsentCard(
+                          doorAvailable: widget.store.approxAddressEnabled,
+                          signedIn: widget.store.canReport,
+                          onDecline: () => answerLookup(LookupConsent.declined),
+                          onAgree: () => answerLookup(LookupConsent.granted),
+                        ),
+                      ] else if (approx case final approx?) ...[
                         const SizedBox(height: 8),
                         ApproxAddressRow(controller: approx),
                       ],
@@ -1749,14 +1827,14 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           newDistrict = v ?? '';
                         }),
                       ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '依地圖位置自動帶入，可以改。',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: colors.onSurfaceVariant,
+                      if (autoLookup)
+                        LookupAutoRow(onTurnOff: turnOffLookup)
+                      else if (!asksConsent) ...[
+                        const SizedBox(height: 8),
+                        LookupOffRow(
+                          onTurnOn: () => setState(() => reasking = true),
                         ),
-                      ),
+                      ],
                       if (lookingUp)
                         const LocationNote(
                           icon: Icons.travel_explore,

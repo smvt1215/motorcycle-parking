@@ -87,7 +87,10 @@ void main() {
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
         final store = (await tester.runAsync(() async {
-          SharedPreferences.setMockInitialValues({});
+          SharedPreferences.setMockInitialValues({
+            // The rider agreed to the lookups (#462), so they run as these tests expect.
+            'locationLookupConsent': 'granted',
+          });
           return AppStore(
             LocalRepository(await SharedPreferences.getInstance()),
             null,
@@ -154,7 +157,10 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = (await tester.runAsync(() async {
-      SharedPreferences.setMockInitialValues({});
+      SharedPreferences.setMockInitialValues({
+        // The rider agreed to the lookups (#462), so they run as these tests expect.
+        'locationLookupConsent': 'granted',
+      });
       return AppStore(
         LocalRepository(await SharedPreferences.getInstance()),
         null,

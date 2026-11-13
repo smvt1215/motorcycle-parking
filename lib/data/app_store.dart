@@ -1220,8 +1220,26 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     return LocationFix(p.latitude, p.longitude, p.accuracy);
   }
 
+  /// The rider's answer to the picker forms' explanation (N1c, #462). The
+  /// forms look nothing up by themselves unless it is granted; 帳號與設定
+  /// changes it too, and an open form follows at once.
+  LookupConsent get lookupConsent => _lookupConsent;
+  late LookupConsent _lookupConsent = local.lookupConsent;
+
+  /// Whether the picker forms may look the marker up by themselves.
+  bool get autoLookup => _lookupConsent == LookupConsent.granted;
+
+  /// Takes effect at once, then is saved on the device.
+  Future<void> setLookupConsent(LookupConsent value) async {
+    if (value == _lookupConsent) return;
+    _lookupConsent = value;
+    notifyListeners();
+    await local.setLookupConsent(value);
+  }
+
   /// The county or city and district at a position (國土測繪中心); tests
-  /// override it to stay offline.
+  /// override it to stay offline. The picker forms ask only with
+  /// [autoLookup].
   Future<Town?> townAt(double lat, double lng) => lookupTown(lat, lng);
 
   /// Whether the forms may show an approximate door: Google's results may
