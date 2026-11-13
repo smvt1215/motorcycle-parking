@@ -290,7 +290,7 @@ void main() {
       await _close(tester);
     });
 
-    testWidgets('拖曳中不查；停下後查一次；移動不到 10 公尺不重查', (tester) async {
+    testWidgets('拖曳中不查；停下後查一次；小幅移動也重查', (tester) async {
       final store = (await tester.runAsync(_store))!;
       addTearDown(store.dispose);
       await _openNew(tester, store, const Size(390, 844));
@@ -312,7 +312,8 @@ void main() {
       expect(find.text(_found), findsOneWidget);
 
       await _dragSlightly(tester);
-      expect(store.asked, hasLength(2));
+      expect(store.asked, hasLength(3));
+      expect(store.asked[2], isNot(store.asked[1]));
       expect(find.text(_found), findsOneWidget);
       await _close(tester);
     });
@@ -408,18 +409,84 @@ void main() {
       await tester.pump();
     }
 
-    testWidgets('移動約 10 公尺以上才重查，距離從上次查到的點算', (tester) async {
+    testWidgets('移動一點點，舊門牌立刻失效，停穩後重查', (tester) async {
       final (c, asked) = make(tester);
       await settle(tester);
       expect(asked, hasLength(1));
-      // About 5 m, twice: the second is 10 m from the answer.
-      c.moved(25.03004, 121.56);
+      expect(c.address, _door);
+      // About 1 m.
+      c.moved(25.03001, 121.56);
+      expect(c.status, ApproxStatus.loading);
+      expect(c.address, isNull);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(asked, hasLength(1));
+      await settle(tester);
+      expect(asked, [(25.03, 121.56), (25.03001, 121.56)]);
+      expect(c.status, ApproxStatus.found);
+      expect(c.address, _door);
+    });
+
+    testWidgets('拖曳中移到別處，舊門牌也立刻失效', (tester) async {
+      final (c, asked) = make(tester);
+      await settle(tester);
+      c.dragging(true);
+      c.moved(25.03001, 121.56);
+      expect(c.address, isNull);
+      await settle(tester);
+      expect(asked, hasLength(1));
+      c.dragging(false);
+      await settle(tester);
+      expect(asked, [(25.03, 121.56), (25.03001, 121.56)]);
+    });
+
+    testWidgets('停穩前連續移動只查最後一點', (tester) async {
+      final (c, asked) = make(tester);
+      await settle(tester);
+      c.moved(25.03001, 121.56);
+      await tester.pump(const Duration(milliseconds: 300));
+      c.moved(25.03002, 121.56);
+      await tester.pump(const Duration(milliseconds: 300));
+      c.moved(25.03003, 121.56);
+      await settle(tester);
+      expect(asked, [(25.03, 121.56), (25.03003, 121.56)]);
+    });
+
+    testWidgets('座標沒變（拿起又放回、同一點再呼叫）不重查', (tester) async {
+      final (c, asked) = make(tester);
+      await settle(tester);
+      c.dragging(true);
+      c.dragging(false);
+      await settle(tester);
+      c.moved(25.03, 121.56);
       await settle(tester);
       expect(asked, hasLength(1));
       expect(c.status, ApproxStatus.found);
-      c.moved(25.0301, 121.56);
+      expect(c.address, _door);
+    });
+
+    testWidgets('換帳號後同一點也重查', (tester) async {
+      final asked = <(double, double)>[];
+      final auth = ValueNotifier(true);
+      addTearDown(auth.dispose);
+      final c = ApproxAddressController(
+        lookup: (a, b) async {
+          asked.add((a, b));
+          return _door;
+        },
+        auth: auth,
+        signedIn: () => auth.value,
+        lat: 25.03,
+        lng: 121.56,
+      );
+      addTearDown(c.dispose);
+      await settle(tester);
+      auth.value = false;
+      expect(c.status, ApproxStatus.signedOut);
+      expect(c.address, isNull);
+      auth.value = true;
       await settle(tester);
       expect(asked, hasLength(2));
+      expect(c.status, ApproxStatus.found);
     });
 
     testWidgets('連線失敗後移動一點點也會再查', (tester) async {
@@ -446,8 +513,11 @@ void main() {
       c.dragging(false);
       c.moved(25.04, 121.56);
       await settle(tester);
+      c.moved(25.04001, 121.56);
+      await settle(tester);
       expect(asked, hasLength(1));
       expect(c.status, ApproxStatus.dailyLimit);
+      expect(c.address, isNull);
     });
 
     testWidgets('拖曳開始後，先前查詢的答案不算數', (tester) async {
