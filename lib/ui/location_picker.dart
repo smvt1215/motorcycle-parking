@@ -14,6 +14,7 @@ import '../features/map/google_map_style.dart';
 import '../features/map/maps_sdk.dart';
 import '../features/map/osm_tiles.dart';
 import 'adaptive/adaptive.dart';
+import 'location_rationale.dart';
 
 /// What the map part of [LocationPicker] shows and reports.
 class LocationMapView {
@@ -156,6 +157,7 @@ class _LocationPickerState extends State<LocationPicker>
       locating = true;
       locateError = null;
     });
+    var again = false;
     try {
       final got = await widget.onLocate!();
       if (!mounted) return;
@@ -163,6 +165,10 @@ class _LocationPickerState extends State<LocationPicker>
       widget.onChanged(got.lat, got.lng);
     } on LocationAccessError catch (e) {
       if (mounted) await showLocationPrompt(context, e.issue);
+    } on LocationRationaleNeeded catch (e) {
+      // The first ask is explained first (#458); 繼續 asks the system.
+      again = mounted && await showLocationRationale(context);
+      if (again) e.accept();
     } catch (_) {
       if (mounted) {
         setState(() => locateError = '抓不到目前位置。到空曠處再按一次，或直接拖曳標記。');
@@ -170,6 +176,7 @@ class _LocationPickerState extends State<LocationPicker>
     } finally {
       if (mounted) setState(() => locating = false);
     }
+    if (again && mounted) await locate();
   }
 
   Future<void> search() async {

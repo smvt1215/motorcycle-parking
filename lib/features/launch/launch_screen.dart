@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/location_rationale.dart';
 import '../../ui/version_text.dart';
 
 /// Covers the app while [AppStore.start] runs. It continues the native splash
@@ -11,9 +12,14 @@ class LaunchCurtain extends StatefulWidget {
     required this.visible,
     required this.locating,
     required this.child,
+    this.onExplained,
   });
   final bool visible, locating;
   final Widget child;
+
+  /// Set while the launch screen explains location (#458, P20a ①); called
+  /// with true for 繼續, false for 先不要.
+  final ValueChanged<bool>? onExplained;
 
   @override
   State<LaunchCurtain> createState() => _LaunchCurtainState();
@@ -53,11 +59,52 @@ class _LaunchCurtainState extends State<LaunchCurtain> {
               onEnd: () {
                 if (!widget.visible) setState(() => painted = false);
               },
-              child: LaunchScreen(locating: widget.locating),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: ExcludeSemantics(
+                      // Covered by the explanation, the only thing to read.
+                      excluding: widget.onExplained != null,
+                      child: LaunchScreen(locating: widget.locating),
+                    ),
+                  ),
+                  if (widget.onExplained case final explained?)
+                    Positioned.fill(
+                      child: _LocationExplanation(onExplained: explained),
+                    ),
+                ],
+              ),
             ),
           ),
         ),
     ],
+  );
+}
+
+/// The explanation rises from the bottom edge, as wide as the screen on a
+/// phone and at most [LocationRationaleCard.maxWidth] on a tablet (P20t).
+/// With large text it grows up to the status bar and its uses scroll
+/// (P20c ③).
+class _LocationExplanation extends StatelessWidget {
+  const _LocationExplanation({required this.onExplained});
+  final ValueChanged<bool> onExplained;
+
+  @override
+  Widget build(BuildContext context) => SafeArea(
+    bottom: false,
+    minimum: const EdgeInsets.only(top: 8),
+    child: Align(
+      alignment: Alignment.bottomCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(
+          maxWidth: LocationRationaleCard.maxWidth,
+        ),
+        child: LocationRationaleCard(
+          onContinue: () => onExplained(true),
+          onDecline: isCupertino ? null : () => onExplained(false),
+        ),
+      ),
+    ),
   );
 }
 

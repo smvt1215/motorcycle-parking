@@ -222,11 +222,14 @@ class _MapPageState extends ConsumerState<MapPage> {
   }
 
   /// A settled failure is prompted before the legend; a fix still pending
-  /// (slow GPS, or the system permission dialog) is prompted after it.
+  /// (slow GPS, or the system permission dialog) is prompted after it. A
+  /// refusal right after the launch explanation (#458) is not prompted: the
+  /// rider just answered, and hears about it when asking for location.
   Future<void> _greet(AppStore store) async {
     // Read once: the fix may settle while the legend is open.
     final pending = store.locatingAtLaunch;
-    if (!pending) await _promptLocation(store);
+    final quiet = store.explainedAtLaunch;
+    if (!pending && !quiet) await _promptLocation(store);
     if (store.introduceLegend && mounted) {
       unawaited(store.markLegendSeen());
       await showMapLegend(
@@ -237,7 +240,7 @@ class _MapPageState extends ConsumerState<MapPage> {
     }
     if (pending) {
       await store.launchLocation;
-      await _promptLocation(store);
+      if (!quiet) await _promptLocation(store);
     }
     if (mounted) setState(() => greetingDone = true);
   }
@@ -1357,6 +1360,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                 right: 16,
                 bottom: tablet ? actionsBottom : tabBarInset + 16,
                 child: MapActions(
+                  located: store.located,
                   onLocate: () => runAction(context, () async {
                     await store.locate();
                     await _moveCamera(LatLng(store.lat, store.lng), 16);

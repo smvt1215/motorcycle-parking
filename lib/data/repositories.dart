@@ -263,6 +263,19 @@ class LocalRepository {
   bool get legendSeen => prefs.getBool('legendSeen') ?? false;
   Future<void> setLegendSeen() => prefs.setBool('legendSeen', true);
 
+  /// The App has had the system ask for location (#458), so a denied
+  /// permission is the rider's answer, not one never asked. Before this
+  /// flag existed every launch asked at once, so a launch that already
+  /// showed the legend counts as asked.
+  bool get locationAsked => prefs.getBool('locationAsked') ?? legendSeen;
+  Future<void> setLocationAsked(bool value) =>
+      prefs.setBool('locationAsked', value);
+
+  /// The rider chose 先不要 on the launch explanation (Android): later
+  /// launches leave location alone until the rider asks for it.
+  bool get locationDeferred => prefs.getBool('locationDeferred') ?? false;
+  Future<void> setLocationDeferred() => prefs.setBool('locationDeferred', true);
+
   /// The Beta cities the backend last named; null before it ever answered.
   List<String>? get availabilityBetaCities =>
       prefs.getStringList('availabilityBetaCities');

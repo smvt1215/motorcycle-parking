@@ -191,11 +191,14 @@ void main() {
     expect(find.text('地圖怎麼看'), findsNothing);
   });
 
-  testWidgets('定位未授權時，啟動後先提醒前往設定，再顯示第一次的圖例', (tester) async {
+  testWidgets('已問過權限、定位未授權時，啟動後先提醒前往設定，再顯示第一次的圖例', (tester) async {
     final store = (await tester.runAsync(freshStore))!;
     final started = await startReal(
       tester,
       () => store.start(
+        // Asked on an earlier launch (no explanation this time, #458): the
+        // refusal is prompted as before. See location_rationale_test.dart
+        // for the first ask.
         locator: () async {
           store.locationIssue = LocationIssue.denied;
           return false;
@@ -206,6 +209,7 @@ void main() {
     await pumpApp(tester, store);
     await tester.runAsync(() => started.done);
     await tester.pumpAndSettle();
+    expect(store.explainedAtLaunch, isFalse);
     expect(find.text('尚未允許使用位置'), findsOneWidget);
     expect(find.text('前往設定'), findsOneWidget);
     expect(find.text('地圖怎麼看'), findsNothing);
