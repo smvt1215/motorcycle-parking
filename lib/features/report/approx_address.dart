@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import '../../core/address_search.dart';
-import '../../core/geo.dart';
 import '../../ui/adaptive/adaptive.dart';
 
 /// What the door row under the picker says (N1b, S6).
@@ -18,8 +17,9 @@ enum ApproxStatus {
 }
 
 /// The approximate door at the marker, for one form (#407). It is only shown:
-/// nothing here reaches a report, and the answer lives as long as the form,
-/// never shared between riders (Service Specific Terms 6.3.2).
+/// nothing here reaches a report, and the answer lives only while the marker
+/// stays on the point it was asked for, never shared between riders (Service
+/// Specific Terms 6.3).
 class ApproxAddressController extends ChangeNotifier {
   ApproxAddressController({
     required this.lookup,
@@ -41,12 +41,12 @@ class ApproxAddressController extends ChangeNotifier {
   /// How long the marker must rest before a lookup, as for the county.
   static const pause = Duration(milliseconds: 600);
 
-  /// Closer than this to the last answer, the door stays as it is.
-  static const sameDoorMeters = 10.0;
-
   /// Where the marker is.
   double lat, lng;
   bool _wasSignedIn, _dragging = false, _closed = false;
+
+  /// The last answer and the exact point it was asked for. Any other point
+  /// drops it: an earlier answer never stands in for a new position (#460).
   ({double lat, double lng, ApproxAddress? address})? _answer;
 
   /// Set once the day's quota is gone; further moves cannot be answered.
@@ -77,14 +77,20 @@ class ApproxAddressController extends ChangeNotifier {
     _ => ApproxStatus.found,
   };
 
+  void _forgetOtherPoint() {
+    if (_answer case final a? when a.lat != lat || a.lng != lng) {
+      _answer = null;
+    }
+  }
+
   void _settle({Duration delay = pause}) {
     _cancel();
+    _forgetOtherPoint();
     if (_limit case final limit?) return _show(limit);
     if (!signedIn()) return _show(ApproxStatus.signedOut);
-    if (_answer case final a?
-        when distanceMeters(a.lat, a.lng, lat, lng) < sameDoorMeters) {
-      return _show(_statusOf(a.address));
-    }
+    // Released without moving, or put back on the same point: the answer
+    // is still for exactly this position.
+    if (_answer case final a?) return _show(_statusOf(a.address));
     _show(ApproxStatus.loading);
     final round = _round;
     _timer = Timer(delay, () => _ask(round));
@@ -135,6 +141,7 @@ class ApproxAddressController extends ChangeNotifier {
   void moved(double newLat, double newLng) {
     lat = newLat;
     lng = newLng;
+    _forgetOtherPoint();
     if (!_dragging) _settle();
   }
 
@@ -142,8 +149,9 @@ class ApproxAddressController extends ChangeNotifier {
     final now = signedIn();
     if (now == _wasSignedIn) return;
     _wasSignedIn = now;
-    // Another account has its own quota.
+    // Another account has its own quota, and its own answers (6.3.2).
     _limit = null;
+    _answer = null;
     if (!_dragging) _settle(delay: Duration.zero);
   }
 
