@@ -478,6 +478,58 @@ void main() {
         expect(find.text(settingsHiddenRidersSyncedDetail), findsNothing);
         expect(tester.takeException(), isNull);
       });
+
+      testWidgetsOn('${platform.name} #467 已登入：在隱私分組切換自動查詢，已隱藏的車友副標維持已同步', (
+        tester,
+      ) async {
+        setUpView(tester, platform, const Size(390, 844));
+        final store = (await tester.runAsync(() async {
+          SharedPreferences.setMockInitialValues(threeHidden());
+          final s = AppStore(
+            LocalRepository(await SharedPreferences.getInstance()),
+            null,
+            hiddenRidersAccount: FakeAccountList(),
+          );
+          await s.hiddenRiders.signedIn('rider-1');
+          return s;
+        }))!;
+        await tester.pumpWidget(
+          app(
+            Scaffold(
+              body: Builder(
+                builder: (context) => TextButton(
+                  onPressed: () => showSettings(context, store),
+                  child: const Text('settings'),
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('settings'));
+        await tester.pumpAndSettle();
+        final lookup = find.byKey(const ValueKey('settings-lookup'));
+        await tester.scrollUntilVisible(
+          lookup,
+          100,
+          scrollable: find.byType(Scrollable).last,
+        );
+        await tester.pumpAndSettle();
+        expect(find.text(settingsHiddenRidersSyncedDetail), findsOneWidget);
+
+        // The tile listens to the store too; the switch beside it
+        // notifies it, and the subtitle must not fall back.
+        await tester.tap(lookup);
+        await tester.pumpAndSettle();
+        expect(store.lookupConsent, LookupConsent.granted);
+        expect(find.text(settingsHiddenRidersSyncedDetail), findsOneWidget);
+        expect(find.text(settingsHiddenRidersDetail), findsNothing);
+
+        await tester.tap(lookup);
+        await tester.pumpAndSettle();
+        expect(store.lookupConsent, LookupConsent.declined);
+        expect(find.text(settingsHiddenRidersSyncedDetail), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
     }
   });
 
