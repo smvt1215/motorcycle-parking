@@ -81,7 +81,12 @@ String hiddenRiderInitial(String name) {
 // P10: the two new rows.
 const settingsPrivacyGroup = '隱私';
 const settingsHiddenRiders = hiddenRidersTitle;
+
+/// The row's subtitle signed out: the list stays on this device for now.
 const settingsHiddenRidersDetail = '登入後會同步到你的帳號';
+
+/// The row's subtitle while the list follows the account (#467).
+const settingsHiddenRidersSyncedDetail = '已同步到你的帳號';
 String settingsHiddenRidersCount(int count) => '$count 位';
 const settingsContact = '聯絡我們';
 const settingsContactDetail = '問題回報、內容檢舉';

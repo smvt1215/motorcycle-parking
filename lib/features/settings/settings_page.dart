@@ -74,13 +74,18 @@ Future<void> showSettings(BuildContext context, AppStore store) {
         _GroupTitle(settingsPrivacyGroup),
         const SizedBox(height: 4),
         ListenableBuilder(
-          listenable: store.hiddenRiders,
+          listenable: Listenable.merge([store, store.hiddenRiders]),
           builder: (ctx, _) => ListTile(
             key: const ValueKey('settings-hidden-riders'),
             contentPadding: EdgeInsets.zero,
             leading: const Icon(Icons.visibility_off_outlined),
             title: const Text(settingsHiddenRiders),
-            subtitle: const Text(settingsHiddenRidersDetail),
+            // Signed in, the list follows the account (#467).
+            subtitle: Text(
+              store.hiddenRiders.followsAccount
+                  ? settingsHiddenRidersSyncedDetail
+                  : settingsHiddenRidersDetail,
+            ),
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

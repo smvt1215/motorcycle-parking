@@ -9,27 +9,30 @@ import '../../ui/adaptive/adaptive.dart';
 ///   #131314 fill, #8E918F stroke, #E3E3E3 label), pill shape.
 /// - Apple: HIG "Creating a custom Sign in with Apple button" — black fill
 ///   with white logo and title (dark theme: white with black), the logo file
-///   from Apple Design Resources at the button's height, title at 43% of the
-///   button's height, at least 8% of the width after the title.
+///   from Apple Design Resources at the button's height, at least 8% of the
+///   width after the title.
+/// Both titles share one type size, as the approved P11 boards set them
+/// (#467): Android 15, iOS 17.
 
 /// Minimum heights: the platform touch target (iOS 44pt, Android 48dp),
 /// equal for both providers so Apple is never smaller than Google (HIG).
 double brandButtonHeight() => isCupertino ? 44 : 48;
 
+/// The type size of both providers' titles before text scaling, as the
+/// approved P11 boards set it: Android 15, iOS 17 (#467: the user's call on
+/// 2026-11-13 gives Apple's title Google's size, not 43% of the height).
+double brandLabelSize() => isCupertino ? 17 : 15;
+
 /// The height both providers' buttons share at [textScaler]: the base
-/// height, or more when larger text grows Apple's title (43% of the height)
-/// past it. Apple's logo and title keep that proportion; Google keeps its
-/// own type size and only takes the same height, so the two buttons line up
-/// at every text size (P11; the user's call on 2026-11-08 keeps each
-/// brand's type and logo as their guidelines set them).
+/// height, or more when larger text grows the titles, in the proportion the
+/// text grows. Apple's logo file is drawn at this height, so logo, title
+/// and button keep their proportion; the two buttons line up at every text
+/// size (P11).
 double brandButtonScaledHeight(TextScaler textScaler) {
-  final base = brandButtonHeight();
-  final grown = textScaler.scale(base * _appleTitleRatio) / _appleTitleRatio;
+  final base = brandButtonHeight(), label = brandLabelSize();
+  final grown = base * textScaler.scale(label) / label;
   return grown > base ? grown : base;
 }
-
-/// Apple's title is 43% of the button's height (HIG).
-const _appleTitleRatio = .43;
 
 /// Google's fill, stroke and label colours for the light and dark themes.
 @visibleForTesting
@@ -66,7 +69,6 @@ class BrandSignInButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final height = brandButtonHeight();
     final shared = brandButtonScaledHeight(MediaQuery.textScalerOf(context));
     final Color fill, foreground;
     final BorderSide side;
@@ -79,12 +81,7 @@ class BrandSignInButton extends StatelessWidget {
       side = BorderSide(color: c.stroke);
     }
     final content = apple
-        ? _AppleContent(
-            label: label,
-            color: foreground,
-            height: height,
-            logoHeight: shared,
-          )
+        ? _AppleContent(label: label, color: foreground, logoHeight: shared)
         : _GoogleContent(label: label, color: foreground);
     final button = Material(
       key: const ValueKey('brand-sign-in-surface'),
@@ -134,7 +131,7 @@ class _GoogleContent extends StatelessWidget {
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: color,
-                fontSize: ios ? 17 : 15,
+                fontSize: brandLabelSize(),
                 fontWeight: FontWeight.w500,
                 height: 20 / 15,
               ),
@@ -147,25 +144,23 @@ class _GoogleContent extends StatelessWidget {
 }
 
 /// The Apple logo file sits at the button's height (its built-in padding
-/// keeps the logo, title and button in proportion) and the title is 43% of
-/// that height. Larger text grows the button in the same proportion
-/// ([brandButtonScaledHeight], [logoHeight]); when the title wraps, the
-/// logo stays centred at the single-line height.
+/// keeps the logo and button in proportion) and the title is set at
+/// Google's size ([brandLabelSize]). Larger text grows the button in the
+/// same proportion ([brandButtonScaledHeight], [logoHeight]); when the
+/// title wraps, the logo stays centred at the single-line height.
 class _AppleContent extends StatelessWidget {
   const _AppleContent({
     required this.label,
     required this.color,
-    required this.height,
     required this.logoHeight,
   });
   final String label;
   final Color color;
-  final double height;
   final double logoHeight;
 
   @override
   Widget build(BuildContext context) {
-    final fontSize = height * _appleTitleRatio;
+    final fontSize = brandLabelSize();
     // 8% of the width on each side keeps the title at least that far from
     // the trailing edge; the logo and title are centred in between.
     return Row(

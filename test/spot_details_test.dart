@@ -10,6 +10,7 @@ import 'package:motorcycle_parking/features/map/spot_photos.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
+import 'package:motorcycle_parking/ui/text_wrap.dart';
 
 ParkingSpot facility({int? available, List<String> photos = const []}) =>
     ParkingSpot(
@@ -386,7 +387,13 @@ void main() {
         brightness: Brightness.dark,
       );
       expect(find.text('測試地下停車場'), findsOneWidget);
-      expect(find.text('地下停車場　臺北市內湖區'), findsOneWidget);
+      // At large text 臺北市內湖區 may move to its own line whole (#467).
+      expect(
+        find.byWidgetPredicate(
+          (w) => w is KeepGroupsText && w.data == '地下停車場　臺北市內湖區',
+        ),
+        findsOneWidget,
+      );
       // The four sections (A2), then the notes and the sources.
       for (final field in [
         '有沒有位（普通機車能停的分區）',

@@ -8,6 +8,7 @@ import '../../models/parking.dart';
 import '../../models/space_kind.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/vehicle_marks.dart';
+import '../../ui/text_wrap.dart';
 import '../map/space_type_sheet.dart';
 import 'entry_drafts.dart';
 import 'entry_pages.dart' show SendProblem;
@@ -109,7 +110,8 @@ class EntryRow extends StatelessWidget {
   final String? problem;
   final VoidCallback? onTap;
 
-  Widget _value(TextStyle style) => Text(
+  // Neither the title nor the value ends on one lone character (#467).
+  Widget _value(TextStyle style) => NoOrphanText(
     value!,
     textAlign: TextAlign.end,
     maxLines: 3,
@@ -125,7 +127,7 @@ class EntryRow extends StatelessWidget {
   }) => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(
+      NoOrphanText(
         title,
         style: TextStyle(
           fontSize: 16,

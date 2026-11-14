@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
@@ -197,6 +198,48 @@ void main() {
         }
         expect(tester.takeException(), isNull, reason: '$width');
       }
+    });
+
+    testWidgets('#466 各手機寬度與字級：按鈕文字都不截成刪節號', variant: _platforms, (
+      tester,
+    ) async {
+      for (final width in [360.0, 390.0, 411.0, 430.0]) {
+        for (final scale in [1.0, 1.3, 2.0]) {
+          for (final street in [false, true]) {
+            await _pumpBar(tester, width: width, scale: scale, street: street);
+            final where = '$width 字級 $scale ${street ? '路邊' : '路外'}';
+            for (final label in [
+              SpotPreviewActions.navigateLabel(street: street),
+              '回報現場狀況',
+              '修改建議',
+            ]) {
+              final paragraph = tester.renderObject<RenderParagraph>(
+                find.text(label),
+              );
+              expect(paragraph.didExceedMaxLines, isFalse, reason: where);
+            }
+            expect(tester.takeException(), isNull, reason: where);
+          }
+        }
+      }
+    });
+
+    testWidgets('#466 411 寬 Android：導航到入口完整、縮內距同一排不滑', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.android;
+      addTearDown(() => debugDefaultTargetPlatformOverride = null);
+      await _pumpBar(tester, width: 411);
+      expect(find.byKey(_rail), findsNothing);
+      // The label gets its whole width, letter spacing included.
+      final label = tester.renderObject<RenderParagraph>(find.text('導航到入口'));
+      expect(
+        label.size.width,
+        greaterThanOrEqualTo(label.getMaxIntrinsicWidth(double.infinity)),
+      );
+      expect(
+        tester.getRect(find.byKey(_suggest)).right,
+        lessThanOrEqualTo(391),
+      );
+      debugDefaultTargetPlatformOverride = null;
     });
 
     testWidgets('兩顆放得下：不滑，導航撐滿剩下寬度', variant: _platforms, (tester) async {

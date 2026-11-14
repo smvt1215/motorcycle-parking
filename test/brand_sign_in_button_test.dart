@@ -122,17 +122,24 @@ void main() {
       });
     }
 
-    testWidgets('Apple 標誌與標題依 HIG 比例（${platform.name}）', (tester) async {
+    testWidgets('Apple 標誌依 HIG 比例，兩家標題同字級（${platform.name}）', (tester) async {
       debugDefaultTargetPlatformOverride = platform;
       await _pump(tester, dark: false);
       final button = find.byKey(const ValueKey('apple'));
       final height = tester.getSize(button).height;
-      // The logo file matches the button's height, the title is 43% of it.
+      // The logo file matches the button's height.
       final logo = tester.getSize(find.byType(AppleLogo));
       expect(logo.height, moreOrLessEquals(height));
       expect(logo.width, moreOrLessEquals(height * 31 / 44));
-      final style = tester.widget<Text>(find.text('使用 Apple 登入')).style!;
-      expect(style.fontSize, moreOrLessEquals(height * .43));
+      // #467: both titles at the P11 size, Android 15, iOS 17.
+      final apple = tester.widget<Text>(find.text('使用 Apple 登入')).style!;
+      final google = tester.widget<Text>(find.text('使用 Google 登入')).style!;
+      expect(apple.fontSize, ios ? 17 : 15);
+      expect(google.fontSize, apple.fontSize);
+      expect(
+        tester.getSize(find.text('使用 Apple 登入')).height,
+        lessThanOrEqualTo(tester.getSize(find.text('使用 Google 登入')).height),
+      );
       // At least 8% of the width between the title and the trailing edge.
       final title = tester.getRect(find.text('使用 Apple 登入'));
       final rect = tester.getRect(button);
@@ -165,7 +172,7 @@ void main() {
     }
 
     // Larger system text grows both buttons to one height (P11): Apple's
-    // logo and title keep the HIG proportion, Google keeps its type size.
+    // logo keeps the HIG proportion, both titles keep the one P11 size.
     for (final width in const [390.0, 820.0]) {
       for (final scale in const [1.0, 1.15, 1.5, 2.0]) {
         testWidgets('兩家按鈕同高（${platform.name} ${width.toInt()} 寬，字級 $scale）', (
@@ -186,13 +193,14 @@ void main() {
             moreOrLessEquals(shared),
           );
           expect(apple.height, greaterThanOrEqualTo(shared - .01));
-          final title = tester.widget<Text>(find.text('使用 Apple 登入'));
-          expect(title.style!.fontSize, moreOrLessEquals(base * .43));
-          // Google's type size is its own, not scaled to the height.
-          expect(
-            tester.widget<Text>(find.text('使用 Google 登入')).style!.fontSize,
-            ios ? 17 : 15,
-          );
+          // One type size for both, not scaled to the height (#467).
+          for (final text in ['使用 Apple 登入', '使用 Google 登入']) {
+            expect(
+              tester.widget<Text>(find.text(text)).style!.fontSize,
+              ios ? 17 : 15,
+              reason: text,
+            );
+          }
           debugDefaultTargetPlatformOverride = null;
         });
       }
