@@ -943,20 +943,6 @@ void main() {
               final box = tester.getRect(_off);
               expect(box.contains(tester.getRect(_turnOn).center), isTrue);
 
-              // The note after a move (Q462-1 C): whole, inside the form.
-              _formState(tester, form).move(25.0478, 121.5319);
-              await tester.pumpAndSettle();
-              await _reveal(tester, _moved);
-              expect(tester.takeException(), isNull);
-              final note = tester.getRect(find.text(lookupMovedNote));
-              final fields = tester.getRect(find.byType(TownFields).last);
-              expect(note.left, greaterThanOrEqualTo(fields.left));
-              expect(note.right, lessThanOrEqualTo(fields.right));
-              expect(
-                tester.widget<Text>(find.text(lookupMovedNote)).overflow,
-                isNull,
-              );
-
               await _tap(tester, _turnOn);
               await tester.pumpAndSettle();
               await _tap(tester, _agree);
@@ -969,6 +955,23 @@ void main() {
               final view = tester.view.physicalSize.width;
               expect(tester.getRect(_turnOff).right, lessThanOrEqualTo(view));
               expect(tester.getRect(_turnOff).left, greaterThanOrEqualTo(0));
+
+              // The note after a move with the lookups off again (Q462-1
+              // C): whole, inside the form.
+              await _tap(tester, _turnOff);
+              await tester.pumpAndSettle();
+              _formState(tester, form).move(25.0478, 121.5319);
+              await tester.pumpAndSettle();
+              await _reveal(tester, _moved);
+              expect(tester.takeException(), isNull);
+              final note = tester.getRect(find.text(lookupMovedNote));
+              final fields = tester.getRect(find.byType(TownFields).last);
+              expect(note.left, greaterThanOrEqualTo(fields.left));
+              expect(note.right, lessThanOrEqualTo(fields.right));
+              expect(
+                tester.widget<Text>(find.text(lookupMovedNote)).overflow,
+                isNull,
+              );
               await _close(tester);
             }, variant: _both);
           }
