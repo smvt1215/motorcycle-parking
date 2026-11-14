@@ -6,6 +6,7 @@ import 'package:google_maps_flutter_platform_interface/google_maps_flutter_platf
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/geo.dart';
+import 'package:motorcycle_parking/core/location_access.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/domain/location_check.dart';
 import 'package:motorcycle_parking/ui/location_picker.dart';
@@ -466,6 +467,36 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('抓不到目前位置'), findsOneWidget);
     expect(find.text('25.058100, 121.522600'), findsOneWidget);
+  });
+
+  testWidgets('第一次要求定位前先說明；先不要不動標記，繼續才定位（#458）', (tester) async {
+    var accepted = false;
+    var calls = 0;
+    await pumpPicker(
+      tester,
+      onLocate: () async {
+        calls++;
+        if (!accepted) throw LocationRationaleNeeded(() => accepted = true);
+        return const LocationFix(25.06, 121.52, 8);
+      },
+    );
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('location-rationale')), findsOneWidget);
+    await tester.tap(find.text('先不要'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('location-rationale')), findsNothing);
+    expect(accepted, isFalse);
+    expect(find.textContaining('抓不到目前位置'), findsNothing);
+    expect(find.text('25.058100, 121.522600'), findsOneWidget);
+
+    await tester.tap(find.text('移到我的位置'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('繼續'));
+    await tester.pumpAndSettle();
+    expect(accepted, isTrue);
+    expect(calls, 3);
+    expect(find.text('25.060000, 121.520000'), findsOneWidget);
   });
 
   testWidgets('搜尋入口只在有提供搜尋時出現，結果移動標記並提醒拖曳', (tester) async {

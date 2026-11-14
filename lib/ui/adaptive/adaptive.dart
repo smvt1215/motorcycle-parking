@@ -11,6 +11,7 @@ import '../../core/location_access.dart';
 import '../../data/account_suspended.dart';
 import '../../features/account/suspended_sheet.dart';
 import '../../models/parking.dart';
+import '../location_rationale.dart';
 import 'side_panel.dart';
 
 export 'package:material_ui/material_ui.dart';
@@ -443,8 +444,20 @@ class _PanelTabBar extends StatelessWidget {
 /// iOS: equal-size buttons, the record action prominent (HIG: style, not size).
 /// Android: M3E floating toolbar for locate, the 80dp M3E FAB to record.
 class MapActions extends StatelessWidget {
-  const MapActions({super.key, required this.onLocate, required this.onRecord});
+  const MapActions({
+    super.key,
+    required this.onLocate,
+    required this.onRecord,
+    this.located = true,
+  });
   final VoidCallback onLocate, onRecord;
+
+  /// The map knows where the device is; without a fix the locate button
+  /// shows the searching crosshair instead (#458, P20a ④).
+  final bool located;
+
+  IconData get _locateIcon =>
+      located ? Icons.my_location : Icons.location_searching;
 
   /// Horizontal space the actions take, so neighbors can stay clear of them.
   /// Compact, as in map apps: the map stays the focus.
@@ -456,11 +469,7 @@ class MapActions extends StatelessWidget {
       return Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          MapAction(
-            label: '定位到我',
-            icon: Icons.my_location,
-            onPressed: onLocate,
-          ),
+          MapAction(label: '定位到我', icon: _locateIcon, onPressed: onLocate),
           const SizedBox(height: 12),
           // Not a P: that is the map's "parkable" marker.
           MapAction(
@@ -480,7 +489,7 @@ class MapActions extends StatelessWidget {
           key: const ValueKey('locate-fab'),
           size: M3EFabSize.regular,
           color: M3EFabColor.secondary,
-          icon: const Icon(Icons.my_location),
+          icon: Icon(_locateIcon),
           tooltip: '定位到我',
           onPressed: onLocate,
         ),
@@ -672,6 +681,13 @@ Future<void> runAction(
     await action();
   } on LocationAccessError catch (e) {
     if (context.mounted) await showLocationPrompt(context, e.issue);
+  } on LocationRationaleNeeded catch (e) {
+    // The first ask is explained first (#458); 繼續 runs the action again,
+    // which now asks the system. 先不要 leaves things as they were.
+    if (context.mounted && await showLocationRationale(context)) {
+      e.accept();
+      if (context.mounted) await runAction(context, action);
+    }
   } catch (e) {
     if (accountSuspendedFrom(e) case final suspended?) {
       if (context.mounted) {
