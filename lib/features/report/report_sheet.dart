@@ -527,6 +527,14 @@ class _ReportFormState extends State<ReportForm> {
 
   /// Set when the lookup moved the spot into another county or city.
   String? movedFromCity;
+
+  /// The marker moved since the county and district were picked or looked
+  /// up, so they may belong to the old position.
+  bool townUnchecked = false;
+
+  /// Says so under them while nothing looks them up (Q462-1 C).
+  bool get showsMovedNote =>
+      townUnchecked && !autoLookup && (city != null || district.isNotEmpty);
   Timer? lookupTimer;
   int lookupRound = 0;
   bool sending = false;
@@ -594,6 +602,7 @@ class _ReportFormState extends State<ReportForm> {
           movedFromCity = before != null && before != town.city ? before : null;
           city = town.city;
           district = town.district;
+          townUnchecked = false;
           applyDefaults();
         }
       });
@@ -610,10 +619,16 @@ class _ReportFormState extends State<ReportForm> {
   void move(double a, double b) => setState(() {
     lat = a;
     lng = b;
-    // The district belonged to the old position; never send it stale.
-    district = '';
-    // Nothing leaves the device until the rider agreed (#462).
-    if (autoLookup) scheduleLookup();
+    townUnchecked = true;
+    // Nothing leaves the device until the rider agreed (#462): the county
+    // and district the rider picked stay, with a note to check them
+    // (Q462-1 C).
+    if (autoLookup) {
+      // The district belonged to the old position; the lookup brings the
+      // new one.
+      district = '';
+      scheduleLookup();
+    }
     approx?.moved(a, b);
   });
 
@@ -919,10 +934,15 @@ class _ReportFormState extends State<ReportForm> {
             movedFromCity = null;
           }
           city = v;
+          townUnchecked = false;
           applyDefaults();
         }),
-        onDistrict: (v) => setState(() => district = v ?? ''),
+        onDistrict: (v) => setState(() {
+          district = v ?? '';
+          townUnchecked = false;
+        }),
       ),
+      if (showsMovedNote) const TownMovedNote(),
       if (autoLookup)
         LookupAutoRow(onTurnOff: turnOffLookup)
       else if (!asksConsent) ...[

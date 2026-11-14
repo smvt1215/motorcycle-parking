@@ -103,11 +103,10 @@ Future<void> scrollAndSend(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-Future<RecordingStore> createStore() async {
-  SharedPreferences.setMockInitialValues({
-    // The rider agreed to the lookups (#462), so they run as these tests expect.
-    'locationLookupConsent': 'granted',
-  });
+/// [consent]: the rider agreed to the lookups (#462) unless a test says
+/// otherwise, so they run as these tests expect.
+Future<RecordingStore> createStore([String consent = 'granted']) async {
+  SharedPreferences.setMockInitialValues({'locationLookupConsent': consent});
   final store = RecordingStore(
     LocalRepository(await SharedPreferences.getInstance()),
   );
@@ -1189,6 +1188,40 @@ void main() {
       await tester.pumpWidget(const SizedBox.shrink());
     });
   }
+
+  testWidgets('位置不正確：沒開自動查詢時移動標記，縣市與區保留並提醒確認，照樣送出（Q462-1 C）', (tester) async {
+    final store = (await tester.runAsync(() => createStore('declined')))!;
+    addTearDown(store.dispose);
+    // Anything looked up would show: the lookup answers another county.
+    store
+      ..town = const Town('新北市', '板橋區')
+      ..fix = const LocationFix(25.0343, 121.5623, 6);
+    await openLocation(tester, store);
+    expect(find.byKey(const ValueKey('lookup-moved')), findsNothing);
+    await reveal(tester, find.byKey(const ValueKey('location-locate')));
+    await tester.tap(find.byKey(const ValueKey('location-locate')));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    await reveal(tester, find.byKey(const ValueKey('lookup-moved')));
+    expect(find.text('標記移動了，請確認縣市與行政區'), findsOneWidget);
+    expect(find.byKey(const ValueKey('suggestion-city-changed')), findsNothing);
+
+    // The rider's pick for the new position confirms it.
+    final fields = tester.widget<TownFields>(find.byType(TownFields));
+    fields.onDistrict('大安區');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('lookup-moved')), findsNothing);
+
+    await sendSuggestion(tester);
+    final body = store.submissions.single;
+    expect(body['proposed'], {
+      'lat': 25.0343,
+      'lng': 121.5623,
+      'city': '臺北市',
+      'district': '大安區',
+    });
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
 
   testWidgets('位置不正確：跨縣市提醒規則改變，超過 150 m 先確認', (tester) async {
     final store = (await tester.runAsync(createStore))!;

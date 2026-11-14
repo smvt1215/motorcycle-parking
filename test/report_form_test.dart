@@ -78,6 +78,8 @@ void main() {
     double scale = 1,
     Brightness brightness = Brightness.light,
     double keyboard = 0,
+    // The rider agreed to the lookups (#462), so they run as these tests expect.
+    String consent = 'granted',
   }) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = size;
@@ -85,8 +87,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     final store = (await tester.runAsync(() async {
       SharedPreferences.setMockInitialValues({
-        // The rider agreed to the lookups (#462), so they run as these tests expect.
-        'locationLookupConsent': 'granted',
+        'locationLookupConsent': consent,
       });
       // A known spot nearby fills in the city.
       return RecordingStore(
@@ -344,6 +345,53 @@ void main() {
     expect(spot['lat'], 25.0347);
     expect(spot['city'], '臺北市');
     expect(spot['district'], '大安區');
+  });
+
+  testWidgets('沒開自動查詢：移動標記後自己選的縣市與區照樣送出，並提醒確認（Q462-1 C）', (tester) async {
+    final store = await openForm(tester, consent: 'declined');
+    final fields = tester.widget<TownFields>(find.byType(TownFields));
+    fields.onCity('新北市');
+    fields.onDistrict('板橋區');
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('lookup-moved')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('location-locate')));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('lookup-moved')), findsOneWidget);
+    expect(find.text('標記移動了，請確認縣市與行政區'), findsOneWidget);
+    expect(find.text('板橋區'), findsOneWidget);
+    expect(store.lookups, isEmpty);
+
+    // A reminder only: the report goes out as picked.
+    final spot = await send(tester, store);
+    expect(spot['lat'], 25.0343);
+    expect(spot['city'], '新北市');
+    expect(spot['district'], '板橋區');
+  });
+
+  testWidgets('沒開自動查詢：在選單再選同一個區也算確認，提醒消失（Q462-1 C）', (tester) async {
+    await openForm(tester, consent: 'declined');
+    final fields = tester.widget<TownFields>(find.byType(TownFields));
+    fields.onDistrict('信義區');
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('location-locate')));
+    await tester.pump(const Duration(milliseconds: 700));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('lookup-moved')), findsOneWidget);
+
+    final district = find.byWidgetPredicate(
+      (w) =>
+          w is DropdownButtonFormField<String> &&
+          '${w.key}'.contains('report-district'),
+    );
+    await scrollTo(tester, district);
+    await tester.tap(district);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('信義區').last);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('lookup-moved')), findsNothing);
+    expect(find.text('信義區'), findsOneWidget);
   });
 
   testWidgets('位置段：區只列所選縣市的行政區，換縣市清掉區', (tester) async {
