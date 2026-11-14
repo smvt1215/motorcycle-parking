@@ -10,9 +10,11 @@ import '../../data/account_deletion.dart';
 import '../../data/account_status.dart';
 import '../../data/app_store.dart';
 import '../../data/profile_repository.dart';
+import '../../data/repositories.dart' show LookupConsent;
 import '../../domain/account_deletion_display.dart';
 import '../../domain/account_display.dart';
 import '../../domain/hidden_riders_display.dart';
+import '../../domain/lookup_consent_display.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/version_text.dart';
 import '../account/suspended_sheet.dart';
@@ -100,6 +102,7 @@ Future<void> showSettings(BuildContext context, AppStore store) {
             onTap: () => openHiddenRiders(ctx, store),
           ),
         ),
+        _LookupSetting(store: store),
         const SizedBox(height: 28),
         Text(
           '關於',
@@ -190,6 +193,57 @@ class _GroupTitle extends StatelessWidget {
           ?.copyWith(color: Theme.of(context).colorScheme.primary),
     ),
   );
+}
+
+/// 選點時自動查縣市與門牌 (P10b, #462): the picker forms' answer, kept on
+/// this device for every account, so shown signed in or not. Off until the
+/// rider agrees, here or in a form. The explanation stays under the switch
+/// either way, so turning it on here is agreeing with it read; turning it
+/// off withdraws, and an open form stops at once.
+class _LookupSetting extends StatelessWidget {
+  const _LookupSetting({required this.store});
+  final AppStore store;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final note = Theme.of(context).textTheme.bodySmall
+        ?.copyWith(fontSize: 13, height: 1.5, color: colors.onSurfaceVariant);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ListenableBuilder(
+          listenable: store,
+          builder: (context, _) => SwitchListTile.adaptive(
+            key: const ValueKey('settings-lookup'),
+            contentPadding: EdgeInsets.zero,
+            secondary: const Icon(Icons.travel_explore),
+            title: const Text(settingsLookup),
+            // The app's colour on both platforms, not iOS's green.
+            activeTrackColor: colors.primary,
+            value: store.autoLookup,
+            onChanged: (on) => unawaited(
+              store.setLookupConsent(
+                on ? LookupConsent.granted : LookupConsent.declined,
+              ),
+            ),
+          ),
+        ),
+        Padding(
+          // Under the title on Android; a group footer on iOS.
+          padding: EdgeInsetsDirectional.only(start: isCupertino ? 0 : 40),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(settingsLookupDetail, style: note),
+              const SizedBox(height: 6),
+              Text(settingsLookupOffDetail, style: note),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 /// A row that opens [uri] in the in-app browser (SFSafariViewController,

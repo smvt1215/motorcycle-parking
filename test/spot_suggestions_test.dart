@@ -104,7 +104,10 @@ Future<void> scrollAndSend(WidgetTester tester) async {
 }
 
 Future<RecordingStore> createStore() async {
-  SharedPreferences.setMockInitialValues({});
+  SharedPreferences.setMockInitialValues({
+    // The rider agreed to the lookups (#462), so they run as these tests expect.
+    'locationLookupConsent': 'granted',
+  });
   final store = RecordingStore(
     LocalRepository(await SharedPreferences.getInstance()),
   );

@@ -91,6 +91,7 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     AuthFlow? authFlow,
     FavoriteHandles? favoriteHandles,
     HiddenRidersStore? hiddenRidersAccount,
+    this._locationDevice,
   }) : authFlow = authFlow ?? (client == null ? null : AuthFlow(client)),
        favoriteHandlesSource =
            favoriteHandles ??
@@ -165,6 +166,15 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }
   final LocalRepository local;
   final SupabaseClient? client;
+
+  /// Tests stand in for the platform here; null uses the device.
+  final LocationDevice? _locationDevice;
+  LocationDevice get locationDevice =>
+      _locationDevice ?? const LocationDevice();
+
+  /// The offline example build (CI) has no device location to read.
+  bool get _offlineDemo =>
+      _locationDevice == null && demo && AppConfig.offlineMap;
 
   /// Null in the example build: no accounts there.
   final AuthFlow? authFlow;
@@ -671,6 +681,25 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// The launch location attempt; the map follows it when it succeeds.
   Future<bool>? launchLocation;
 
+  /// Answered by the explanation on the launch screen while it shows
+  /// (#458): true for 繼續, false for 先不要.
+  Completer<bool>? _launchRationale;
+
+  /// The launch screen explains location before the system asks (#458).
+  bool get explainingLocation => _launchRationale != null;
+
+  /// This launch explained location before the system asked (#458): a
+  /// refusal right after is not prompted until the rider asks for location.
+  bool explainedAtLaunch = false;
+
+  /// The rider pressed 繼續 on an explanation shown by an action, so the
+  /// next ask goes to the system.
+  bool _rationaleAccepted = false;
+
+  /// Completes once the launch attempt is past the permission step, so the
+  /// location wait does not count the time spent reading the explanation.
+  Completer<void>? _permissionSettled;
+
   /// First launch only: the map opens the legend once [starting] ends.
   bool introduceLegend = false;
   MapViewport viewport = const MapViewport(
@@ -730,18 +759,28 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   }) async {
     starting = locatingAtLaunch = true;
     introduceLegend = !local.legendSeen;
+    // SharedPreferences updates its cache before the write returns, so the
+    // launch below already reads the migrated value.
+    unawaited(local.migrateLocationAsked());
     listenForUpdates();
     unawaited(refreshAvailabilityBeta());
+    final permission = _permissionSettled = Completer<void>();
+    // A stand-in locator has no permission step.
+    if (locator != null) permission.complete();
     final location = launchLocation = (locator ?? locateOnLaunch)();
     notifyListeners();
     unawaited(
       location.whenComplete(() {
         locatingAtLaunch = false;
+        _settlePermission();
         if (!_disposed) notifyListeners();
       }),
     );
-    // Armed before loading so the wait overlaps data, not adds to it.
-    final settled = location.timeout(locationWait, onTimeout: () => false);
+    // Armed before loading so the wait overlaps data, not adds to it; the
+    // explanation and the system dialog wait for the rider instead (#458).
+    final settled = permission.future.then(
+      (_) => location.timeout(locationWait, onTimeout: () => false),
+    );
     // Baseline for the later checks, read before the data so it can only be
     // older than what loads: a write between the two reads then reloads
     // once instead of being missed. The location wait, already armed,
@@ -1177,14 +1216,32 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// Throws a [LocationAccessError] when location is off or not permitted
   /// and keeps the reason in [locationIssue]. Asks for permission only when
   /// [request] is set.
-  Future<void> _ensureLocationAccess({bool request = true}) async {
+  ///
+  /// The first time the system would ask, the rider is told why first
+  /// (#458): at launch the launch screen shows the explanation, elsewhere
+  /// this throws [LocationRationaleNeeded] for the action to show it.
+  Future<void> _ensureLocationAccess({
+    bool request = true,
+    bool atLaunch = false,
+  }) async {
+    final device = locationDevice;
     try {
-      if (!await Geolocator.isLocationServiceEnabled()) {
+      if (!await device.serviceEnabled()) {
         throw LocationAccessError(LocationIssue.serviceOff);
       }
-      var permission = await Geolocator.checkPermission();
+      var permission = await device.checkPermission();
       if (request && permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
+        if (_needsRationale) {
+          if (!atLaunch) {
+            throw LocationRationaleNeeded(() => _rationaleAccepted = true);
+          }
+          if (local.locationDeferred || !await _explainAtLaunch()) {
+            throw const _LocationUndecided();
+          }
+        }
+        await local.setLocationAsked(true);
+        _settlePermission(asking: true);
+        permission = await device.requestPermission();
       }
       if (permission == LocationPermission.denied ||
           permission == LocationPermission.deniedForever) {
@@ -1197,12 +1254,46 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<Position> _currentPosition() => Geolocator.getCurrentPosition(
-    locationSettings: const LocationSettings(
-      accuracy: LocationAccuracy.high,
-      timeLimit: Duration(seconds: 20),
-    ),
-  );
+  /// The system has not asked yet on this device (Android cannot tell that
+  /// apart from a refusal, see [LocationDevice]) and the rider has not
+  /// pressed 繼續 on an explanation. Browsers ask in their own way.
+  bool get _needsRationale =>
+      !kIsWeb && !_rationaleAccepted && !local.locationAsked;
+
+  /// Shows the explanation on the launch screen and waits for the rider;
+  /// 先不要 leaves location alone on later launches too.
+  Future<bool> _explainAtLaunch() async {
+    explainedAtLaunch = true;
+    final answer = _launchRationale = Completer<bool>();
+    notifyListeners();
+    final proceed = await answer.future;
+    if (!proceed) {
+      await local.setLocationAsked(false);
+      await local.setLocationDeferred();
+    }
+    return proceed;
+  }
+
+  /// The launch screen's 繼續 (true) or 先不要 (false).
+  void answerLocationRationale(bool proceed) {
+    final answer = _launchRationale;
+    if (answer == null) return;
+    _launchRationale = null;
+    notifyListeners();
+    answer.complete(proceed);
+  }
+
+  /// Starts the launch location wait. The system dialog's time still
+  /// counts towards it, as before the explanation existed, unless it is the
+  /// first ask right after the explanation.
+  void _settlePermission({bool asking = false}) {
+    final settled = _permissionSettled;
+    if (settled == null || settled.isCompleted) return;
+    if (asking && explainedAtLaunch) return;
+    settled.complete();
+  }
+
+  Future<Position> _currentPosition() => locationDevice.currentPosition();
 
   void _setLocation(Position p) {
     lat = p.latitude;
@@ -1214,14 +1305,32 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
   /// A fresh device fix with its accuracy, for placing a spot by hand. It
   /// does not move the map. Throws [LocationAccessError] like [locate].
   Future<LocationFix> currentFix() async {
-    if (demo && AppConfig.offlineMap) return LocationFix(lat, lng, 5);
+    if (_offlineDemo) return LocationFix(lat, lng, 5);
     await _ensureLocationAccess();
     final p = await _currentPosition();
     return LocationFix(p.latitude, p.longitude, p.accuracy);
   }
 
+  /// The rider's answer to the picker forms' explanation (N1c, #462). The
+  /// forms look nothing up by themselves unless it is granted; 帳號與設定
+  /// changes it too, and an open form follows at once.
+  LookupConsent get lookupConsent => _lookupConsent;
+  late LookupConsent _lookupConsent = local.lookupConsent;
+
+  /// Whether the picker forms may look the marker up by themselves.
+  bool get autoLookup => _lookupConsent == LookupConsent.granted;
+
+  /// Takes effect at once, then is saved on the device.
+  Future<void> setLookupConsent(LookupConsent value) async {
+    if (value == _lookupConsent) return;
+    _lookupConsent = value;
+    notifyListeners();
+    await local.setLookupConsent(value);
+  }
+
   /// The county or city and district at a position (國土測繪中心); tests
-  /// override it to stay offline.
+  /// override it to stay offline. The picker forms ask only with
+  /// [autoLookup].
   Future<Town?> townAt(double lat, double lng) => lookupTown(lat, lng);
 
   /// Whether the forms may show an approximate door: Google's results may
@@ -1235,19 +1344,24 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       parking.approxAddress(lat, lng);
 
   Future<void> locate() async {
-    if (demo && AppConfig.offlineMap) return;
+    if (_offlineDemo) return;
     await _ensureLocationAccess();
     _setLocation(await _currentPosition());
   }
 
   /// Best effort: asks for permission once and never throws, so the map
   /// keeps its default center; the map prompts for [locationIssue]. A recent
-  /// cached fix answers first.
+  /// cached fix answers first. The first ask on a device is explained on
+  /// the launch screen (#458).
   Future<bool> locateOnLaunch({bool request = true}) async {
-    if (demo && AppConfig.offlineMap) return false;
+    if (_offlineDemo) {
+      _settlePermission();
+      return false;
+    }
     try {
-      await _ensureLocationAccess(request: request);
-      final last = kIsWeb ? null : await Geolocator.getLastKnownPosition();
+      await _ensureLocationAccess(request: request, atLaunch: request);
+      _settlePermission();
+      final last = kIsWeb ? null : await locationDevice.lastKnownPosition();
       final fresh =
           last != null &&
           DateTime.now().difference(last.timestamp) <
@@ -1256,6 +1370,8 @@ class AppStore extends ChangeNotifier with WidgetsBindingObserver {
       return true;
     } catch (_) {
       return false;
+    } finally {
+      _settlePermission();
     }
   }
 
@@ -1537,4 +1653,9 @@ class _SentSighting {
   final SightingReport report;
   final DateTime at;
   final String? rider;
+}
+
+/// 先不要 on the launch explanation (#458): no fix and nothing to prompt.
+class _LocationUndecided implements Exception {
+  const _LocationUndecided();
 }

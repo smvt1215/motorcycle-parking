@@ -253,15 +253,56 @@ class ReportRefused extends StateError {
   final Object? details;
 }
 
+/// Whether the picker forms may look the marker's position up by themselves
+/// (#462): the county and district at 國土測繪中心 and, signed in, the
+/// approximate door through Google.
+enum LookupConsent {
+  /// Never asked: the forms show the explanation and look nothing up.
+  undecided,
+  granted,
+  declined,
+}
+
 class LocalRepository {
   LocalRepository(this.prefs);
   final SharedPreferences prefs;
+
+  /// Kept on the device only, for every account and both picker forms; a
+  /// reinstall asks again.
+  LookupConsent get lookupConsent =>
+      switch (prefs.getString('locationLookupConsent')) {
+        'granted' => LookupConsent.granted,
+        'declined' => LookupConsent.declined,
+        _ => LookupConsent.undecided,
+      };
+  Future<void> setLookupConsent(LookupConsent value) =>
+      prefs.setString('locationLookupConsent', value.name);
   VehicleType get vehicle =>
       VehicleType.values.byName(prefs.getString('vehicle') ?? 'scooter');
   Future<void> setVehicle(VehicleType value) =>
       prefs.setString('vehicle', value.name);
   bool get legendSeen => prefs.getBool('legendSeen') ?? false;
   Future<void> setLegendSeen() => prefs.setBool('legendSeen', true);
+
+  /// The App has had the system ask for location (#458), so a denied
+  /// permission is the rider's answer, not one never asked.
+  bool get locationAsked => prefs.getBool('locationAsked') ?? false;
+  Future<void> setLocationAsked(bool value) =>
+      prefs.setBool('locationAsked', value);
+
+  /// Writes [locationAsked] once, at launch before the legend can show:
+  /// versions before the flag asked at every launch, so one that already
+  /// showed the legend has asked. Read later, the legend seen on this
+  /// version would wrongly count as asked.
+  Future<void> migrateLocationAsked() async {
+    if (prefs.containsKey('locationAsked')) return;
+    await setLocationAsked(legendSeen);
+  }
+
+  /// The rider chose 先不要 on the launch explanation (Android): later
+  /// launches leave location alone until the rider asks for it.
+  bool get locationDeferred => prefs.getBool('locationDeferred') ?? false;
+  Future<void> setLocationDeferred() => prefs.setBool('locationDeferred', true);
 
   /// The Beta cities the backend last named; null before it ever answered.
   List<String>? get availabilityBetaCities =>

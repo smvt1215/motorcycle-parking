@@ -64,7 +64,10 @@ class _DoorStore extends AppStore {
 }
 
 Future<_DoorStore> _store() async {
-  SharedPreferences.setMockInitialValues({});
+  SharedPreferences.setMockInitialValues({
+    // The rider agreed to the lookups (#462), so they run as these tests expect.
+    'locationLookupConsent': 'granted',
+  });
   return _DoorStore(LocalRepository(await SharedPreferences.getInstance()))
     ..spots = const [_spot];
 }

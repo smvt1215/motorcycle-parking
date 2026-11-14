@@ -267,6 +267,9 @@ class _ParkingAppState extends ConsumerState<ParkingApp> {
                       child: LaunchCurtain(
                         visible: store.starting,
                         locating: store.locatingAtLaunch,
+                        onExplained: store.explainingLocation
+                            ? store.answerLocationRationale
+                            : null,
                         child: child!,
                       ),
                     ),
