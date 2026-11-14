@@ -8,6 +8,7 @@ import '../../models/zone_entries.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
+import '../../ui/text_wrap.dart';
 import '../../domain/availability_beta_display.dart';
 import 'beta_tag.dart';
 import 'spot_photos.dart';
@@ -157,7 +158,7 @@ class SpotDetailHeader extends StatelessWidget {
             ),
             ?titleNote,
             const SizedBox(height: 2),
-            Text(
+            KeepGroupsText(
               subtitle,
               style: text.bodySmall?.copyWith(
                 fontSize: 13,
