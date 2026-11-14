@@ -63,6 +63,22 @@ describe('/privacy', () => {
     expect(main).not.toHaveTextContent('匿名的 SDK 識別碼');
   });
 
+  it('ties the picker lookups to consent and states what leaves the phone (#461, #462, #463)', () => {
+    open();
+    const main = screen.getByRole('main');
+    expect(main).toHaveTextContent('都要你同意「自動查詢」後才會進行');
+    expect(main).toHaveTextContent('不同意或關閉時，App 不會自動送出標記的座標');
+    expect(main).toHaveTextContent('帳號與設定 › 隱私');
+    expect(main).toHaveTextContent('先不要');
+    expect(main).toHaveTextContent('送到我們的伺服器，讀取這個範圍內的停車點');
+    expect(main).toHaveTextContent('DeviceCheck');
+    expect(main).toHaveTextContent('以先到者為準刪除');
+    expect(main).not.toHaveTextContent('不上傳座標');
+    expect(main).not.toHaveTextContent('31 天');
+    expect(main).not.toHaveTextContent('測試環境 1 天、正式環境 7 天');
+    expect(main).not.toHaveTextContent('之後改成固定值');
+  });
+
   it('keeps addresses as text and links the site within the app (#295)', () => {
     open();
     expect(document.querySelector('a[href^="mailto:"]')).toBeNull();
