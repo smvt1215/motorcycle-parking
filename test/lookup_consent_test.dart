@@ -211,6 +211,27 @@ final _off = find.byKey(const ValueKey('lookup-off'));
 final _turnOn = find.byKey(const ValueKey('lookup-turn-on'));
 final _turnOff = find.byKey(const ValueKey('lookup-turn-off'));
 final _door = find.byKey(const ValueKey('approx-address'));
+final _moved = find.byKey(const ValueKey('lookup-moved'));
+
+/// The county and district the open form would send.
+(String?, String) _town(WidgetTester tester, _Form form) {
+  final state = _formState(tester, form);
+  return form == _Form.report
+      ? (state.city as String?, state.district as String)
+      : (state.newCity as String?, state.newDistrict as String);
+}
+
+/// Picks from the county or district field, as its menu does.
+Future<void> _pick(
+  WidgetTester tester, {
+  String? city,
+  String? district,
+}) async {
+  final fields = tester.widget<TownFields>(find.byType(TownFields).last);
+  if (city != null) fields.onCity(city);
+  if (district != null) fields.onDistrict(district);
+  await tester.pumpAndSettle();
+}
 
 final _both = TargetPlatformVariant({
   TargetPlatform.iOS,
@@ -291,6 +312,8 @@ void main() {
             expect(find.textContaining('查不到縣市'), findsNothing);
             expect(find.text(lookupAutoHint), findsNothing);
             expect(_saved(store), consent);
+            // The county stays through every move (Q462-1 C).
+            expect(_town(tester, form).$1, '臺北市');
             await _close(tester);
           }, variant: _both);
         }
@@ -382,8 +405,9 @@ void main() {
       await _open(tester, store, _Form.suggestion);
       await _drag(tester);
       expect(store.towns, isEmpty);
-      // The old position's county is not kept for the new one.
-      expect(find.text('信義區'), findsNothing);
+      // The spot's county and district stay until looked up (Q462-1 C).
+      expect(find.text('信義區'), findsOneWidget);
+      expect(_moved, findsOneWidget);
 
       await _tap(tester, _agree);
       // At once: no 0.6 s wait.
@@ -391,6 +415,8 @@ void main() {
       expect(store.towns, hasLength(1));
       await tester.pumpAndSettle();
       expect(find.text('大安區'), findsOneWidget);
+      expect(find.text('信義區'), findsNothing);
+      expect(_moved, findsNothing);
       final state = _formState(tester, _Form.suggestion);
       // The position asked is where the marker rests now, not the spot's.
       expect(store.towns.single, (state.lat, state.lng));
@@ -504,10 +530,17 @@ void main() {
         expect(find.text('臺北市'), findsOneWidget);
         expect(find.text('大安區'), findsOneWidget);
 
+        // The lookup answered for this position: nothing to check yet.
+        expect(_moved, findsNothing);
+
         await _drag(tester);
         await _locate(tester);
         expect(store.towns, hasLength(towns));
         expect(store.doors, hasLength(doors));
+        // Moved with the lookups off: kept, with the note (Q462-1 C).
+        expect(_town(tester, form), ('臺北市', '大安區'));
+        await _reveal(tester, _moved);
+        expect(_moved, findsOneWidget);
         await _close(tester);
       }, variant: _both);
     }
@@ -529,6 +562,176 @@ void main() {
       final state = tester.state(find.byType(ReportForm)) as dynamic;
       expect(state.city, isNull);
       expect(state.district, '');
+      await _close(tester);
+    });
+  });
+
+  group('沒開自動查詢時移動標記（Q462-1 C）', () {
+    for (final form in _Form.values) {
+      for (final consent in [null, 'declined']) {
+        final state = consent == null ? '還沒選' : '已拒絕';
+        testWidgets('${form.name} $state：縣市與區保留，欄位下方提醒；重新選了就消失', (
+          tester,
+        ) async {
+          final store = (await tester.runAsync(() => _store(consent)))!;
+          addTearDown(store.dispose);
+          await _open(tester, store, form);
+          // The rider's own pick.
+          await _pick(tester, city: '新北市', district: '板橋區');
+          // Not before the marker moves.
+          expect(_moved, findsNothing);
+
+          await _drag(tester);
+          expect(_town(tester, form), ('新北市', '板橋區'));
+          await _reveal(tester, _moved);
+          expect(find.text(lookupMovedNote), findsOneWidget);
+          expect(find.text('新北市'), findsOneWidget);
+          expect(find.text('板橋區'), findsOneWidget);
+          // Right under the two fields, above the 已關閉 row.
+          final note = tester.getRect(_moved);
+          final fields = tester.getRect(find.byType(TownFields).last);
+          expect(note.top, greaterThanOrEqualTo(fields.bottom));
+          expect(note.top - fields.bottom, lessThan(24));
+          if (consent != null) {
+            expect(tester.getRect(_off).top, greaterThan(note.bottom));
+          }
+          // Spoken when it appears.
+          expect(
+            tester
+                .getSemantics(find.text(lookupMovedNote))
+                .flagsCollection
+                .isLiveRegion,
+            isTrue,
+          );
+
+          // Picking the same district again confirms it.
+          await _pick(tester, district: '板橋區');
+          expect(_moved, findsNothing);
+          expect(_town(tester, form), ('新北市', '板橋區'));
+
+          // Every later move asks again; so does 移到我的位置.
+          await _locate(tester);
+          expect(_moved, findsOneWidget);
+          await _pick(tester, city: '臺北市');
+          expect(_moved, findsNothing);
+          _formState(tester, form).move(25.0478, 121.5319);
+          await _rest(tester);
+          expect(_moved, findsOneWidget);
+          expect(_town(tester, form), ('臺北市', ''));
+
+          expect(store.towns, isEmpty);
+          expect(store.doors, isEmpty);
+          await _close(tester);
+        }, variant: _both);
+      }
+
+      testWidgets('${form.name}：開啟自動查詢並查到後提醒消失，之後關閉也不再出現', (tester) async {
+        final store = (await tester.runAsync(() => _store('declined')))!;
+        addTearDown(store.dispose);
+        await _open(tester, store, form);
+        await _pick(tester, city: '新北市', district: '板橋區');
+        await _drag(tester);
+        expect(_moved, findsOneWidget);
+
+        // The explanation is back; still nothing looked up, still to check.
+        await _tap(tester, _turnOn);
+        await tester.pumpAndSettle();
+        expect(_moved, findsOneWidget);
+        expect(_town(tester, form), ('新北市', '板橋區'));
+
+        await _tap(tester, _agree);
+        await tester.pumpAndSettle();
+        expect(store.towns, hasLength(1));
+        expect(_town(tester, form), ('臺北市', '大安區'));
+        expect(_moved, findsNothing);
+
+        await _tap(tester, _turnOff);
+        await tester.pumpAndSettle();
+        expect(_moved, findsNothing);
+        await _close(tester);
+      }, variant: _both);
+
+      testWidgets('${form.name}：開啟自動查詢卻查不到，關閉後提醒還在', (tester) async {
+        final store = (await tester.runAsync(() => _store('declined')))!;
+        addTearDown(store.dispose);
+        store.town = null;
+        await _open(tester, store, form);
+        await _pick(tester, city: '新北市', district: '板橋區');
+        await _drag(tester);
+
+        await _tap(tester, _turnOn);
+        await tester.pumpAndSettle();
+        await _tap(tester, _agree);
+        await tester.pumpAndSettle();
+        expect(store.towns, hasLength(1));
+        // While the lookups are on, their own notes speak.
+        expect(_moved, findsNothing);
+        expect(find.textContaining('查不到縣市'), findsOneWidget);
+        expect(_town(tester, form).$1, '新北市');
+
+        await _tap(tester, _turnOff);
+        await tester.pumpAndSettle();
+        await _reveal(tester, _moved);
+        expect(_moved, findsOneWidget);
+        await _close(tester);
+      });
+
+      testWidgets('${form.name}：已同意時移動標記照舊查詢，不顯示提醒', (tester) async {
+        final store = (await tester.runAsync(() => _store('granted')))!;
+        addTearDown(store.dispose);
+        await _open(tester, store, form);
+        await _rest(tester);
+        final held = store.held = [];
+
+        await _drag(tester);
+        // As before (#470): the old position's are not shown meanwhile.
+        expect(held, hasLength(1));
+        expect(
+          _town(tester, form),
+          form == _Form.report ? ('臺北市', '') : (null, ''),
+        );
+        expect(_moved, findsNothing);
+        expect(find.text('正在查詢所在縣市與行政區…'), findsOneWidget);
+        held.single.complete(const Town('臺北市', '大安區'));
+        await tester.pumpAndSettle();
+        expect(_town(tester, form), ('臺北市', '大安區'));
+        expect(_moved, findsNothing);
+        await _close(tester);
+      }, variant: _both);
+    }
+
+    testWidgets('新增：查詢還在路上就關閉，留下的縣市要提醒確認', (tester) async {
+      final store = (await tester.runAsync(() => _store('granted')))!;
+      addTearDown(store.dispose);
+      await _open(tester, store, _Form.report);
+      await _rest(tester);
+      final held = store.held = [];
+      await _drag(tester);
+      expect(held, hasLength(1));
+
+      await _tap(tester, _turnOff);
+      await tester.pumpAndSettle();
+      held.single.complete(const Town('新北市', '板橋區'));
+      await tester.pumpAndSettle();
+      // The answer is dropped; the county is the old position's.
+      expect(_town(tester, _Form.report), ('臺北市', ''));
+      await _reveal(tester, _moved);
+      expect(_moved, findsOneWidget);
+      await _close(tester);
+    });
+
+    testWidgets('新增：沒有縣市也沒有區時，移動標記不提醒', (tester) async {
+      final store = (await tester.runAsync(_store))!;
+      addTearDown(store.dispose);
+      // No known spot nearby to borrow a county from.
+      store.spots = const [];
+      await _open(tester, store, _Form.report);
+      await _drag(tester);
+      expect(_town(tester, _Form.report), (null, ''));
+      expect(_moved, findsNothing);
+      // Picked after the move: nothing to check.
+      await _pick(tester, city: '臺北市');
+      expect(_moved, findsNothing);
       await _close(tester);
     });
   });
@@ -739,6 +942,20 @@ void main() {
               expect(on.width, greaterThanOrEqualTo(target));
               final box = tester.getRect(_off);
               expect(box.contains(tester.getRect(_turnOn).center), isTrue);
+
+              // The note after a move (Q462-1 C): whole, inside the form.
+              _formState(tester, form).move(25.0478, 121.5319);
+              await tester.pumpAndSettle();
+              await _reveal(tester, _moved);
+              expect(tester.takeException(), isNull);
+              final note = tester.getRect(find.text(lookupMovedNote));
+              final fields = tester.getRect(find.byType(TownFields).last);
+              expect(note.left, greaterThanOrEqualTo(fields.left));
+              expect(note.right, lessThanOrEqualTo(fields.right));
+              expect(
+                tester.widget<Text>(find.text(lookupMovedNote)).overflow,
+                isNull,
+              );
 
               await _tap(tester, _turnOn);
               await tester.pumpAndSettle();
