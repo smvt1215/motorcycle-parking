@@ -246,7 +246,8 @@ staging 設定已於 2026-10-24 完成，並以真實 Google 登入＋TOTP 取�
        - job 在簽章準備後等待下一個 UTC 十秒邊界（最多十秒）再分配號碼。`ios-ipa` 的固定佇列確保不同 job 與重跑拿到遞增號碼；午夜跨日仍遞增。
        - 日序超過 9999 時明確失敗，需調整基準日；不悄悄回繞。commit SHA 與標題記錄在 Firebase release notes，版本仍可追溯。
    - **發佈：Firebase App Distribution**（[說明](https://firebase.google.com/docs/app-distribution)）：
-     - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes "<commit SHA 與標題>"`。
+     - 以 Firebase CLI（`firebase-tools`，固定版本）執行 `firebase appdistribution:distribute <ipa> --app <Firebase iOS App ID> --groups staging-ios --release-notes-file <檔案>`。
+     - release notes 由 `tool/staging_release_notes.py` 產生（Android 與 iOS 同一支）：「Alpha（內部預覽）」、commit SHA 與標題；`.github/staging-release-notice.txt` 存在且非空時，空一行後附上它的內容，用來讓測試者隨版本看到公告（2026-11-15 起是隱私權政策 1.6 的生效通知，#475）。檔案不存在或空白時與原本完全相同。Firebase 文件沒有寫 release notes 的長度上限，公告限 1,000 字元：`tool/test_staging_release_notes.py` 在每個 PR 檢查，超過時發佈步驟直接失敗，不會截斷後送出。**公告過期就要清空或刪除這個檔案**；政策 1.6 的公告在 2026-11-22 生效後移除（PM 排程）。
      - 認證優先用 **Workload Identity Federation**（`google-github-actions/auth`，釘選 SHA；job 加 `id-token: write`），不存放長期金鑰：
        - Google Cloud 的 provider 以 attribute condition 限定 `sub` 為 `staging` Environment，只有綁定 `staging` Environment 的 job 能換到憑證。本 repo 啟用 GitHub 不可變 subject，實際值為 `repo:smvt1215@25175632/motorcycle-parking@1413881483:environment:staging`，不是 `repo:smvt1215/motorcycle-parking:environment:staging`（舊格式會被 attribute condition 拒絕）。
        - 對應的服務帳號只給 **Firebase App Distribution Admin** 角色。
