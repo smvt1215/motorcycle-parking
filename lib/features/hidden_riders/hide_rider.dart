@@ -99,6 +99,7 @@ Future<void> unhideRider(
 ) async {
   final messenger = ScaffoldMessenger.maybeOf(context);
   final media = MediaQuery.of(context);
+  final inPanel = SidePanelScope.isIn(context);
   final removed = await hidden.unhide(handle);
   if (removed == null || messenger == null) return;
   showUndoToast(
@@ -108,13 +109,15 @@ Future<void> unhideRider(
     icon: Icons.visibility_outlined,
     text: unhiddenToast(removed.name),
     onUndo: () => unawaited(hidden.restore(removed)),
+    inPanel: inPanel,
   );
 }
 
 /// A floating toast with 復原 (P17a ③④, P17c ②): about 8 seconds, kept
 /// while a screen reader runs. A long name or large text wraps to two
 /// lines and moves 復原 below it. On a tablet it stays within the
-/// details' width.
+/// details' width; [inPanel], shown in the side panel's own page (P17c ⑤),
+/// it keeps the panel's margins instead.
 void showUndoToast(
   ScaffoldMessengerState messenger,
   MediaQueryData media, {
@@ -122,6 +125,7 @@ void showUndoToast(
   required IconData icon,
   required VoidCallback onUndo,
   Key? key,
+  bool inPanel = false,
 }) {
   messenger
     ..hideCurrentSnackBar()
@@ -131,7 +135,7 @@ void showUndoToast(
         behavior: SnackBarBehavior.floating,
         duration: undoToastDuration,
         persist: media.accessibleNavigation,
-        width: media.size.width >= 680 ? 560 : null,
+        width: !inPanel && media.size.width >= 680 ? 560 : null,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(isCupertino ? 22 : 8),
         ),

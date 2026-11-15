@@ -88,12 +88,25 @@ class _RenderMeasuredHeight extends RenderProxyBox {
 }
 
 /// Opens a spot's details over another page. The map embeds [SpotSheet]
-/// instead, so it stays movable and other spots stay tappable.
+/// instead, so it stays movable and other spots stay tappable. On a tablet
+/// the details from 收藏 and 我的貢獻 take the side panel's place, over the
+/// tab's own panel (Q190L2-1); what they open stacks in the same place.
 Future<void> showSpot(BuildContext context, AppStore store, ParkingSpot spot) =>
     showAdaptiveSheet<void>(
       context,
-      (ctx) => SpotSheet(store: store, spot: spot),
+      (ctx) {
+        final panel = isSidePanelDetail(ctx);
+        // Crossing the tablet width opens the panel or the card afresh, as
+        // on the map: the two lay the same sections out differently.
+        return SpotSheet(
+          key: ValueKey(panel),
+          store: store,
+          spot: spot,
+          panel: panel,
+        );
+      },
       detail: true,
+      sidePanel: sidePanelHost(context),
     );
 
 class SpotSheet extends StatefulWidget {
