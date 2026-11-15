@@ -1,6 +1,7 @@
 import '../models/availability.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
+import '../models/zone_entries.dart';
 import 'eligibility.dart';
 import 'parking_decision.dart';
 import 'rider_meter_display.dart';
@@ -46,6 +47,115 @@ bool heavyCarOpen(ParkingSpot spot, ParkingDecision decision) {
 /// a car bay (zone areas are gone, #188 layer 2).
 bool _carArea(ParkingZone zone) =>
     (zone.condition ?? zoneConditionOf(zone.access))?.bay == Bay.car;
+
+// 普大共用格與普通機車數字（A'，使用者 2026-11-15 決定）---------------------
+//
+// The source sends one scooter count for a whole lot and no count of its
+// own for 普大共用格 (bay motorcycle, share scooter_heavy). #222's rule
+// stands: a scooter count never stands for heavy-only bays (重機專用格,
+// `bay: heavy`) or car bays. The one exception: where every motorcycle bay
+// of the lot is 普大共用 ([motorcycleBaysAllShared]), the scooter count is
+// the shared bays' count, and heavy bikes read it on those bays, marked
+// [sharedWithScooterLabel] (scooters park there too). A lot that also has
+// motorcycle bays for scooters alone keeps 空位未知 on its shared bays,
+// with the scooter count only as a secondary line ([scooterCountLine],
+// [notForHeavyNote]).
+
+/// Beside a count heavy bikes read from the scooter count: those bays are
+/// 普大共用, so scooters park there too.
+const sharedWithScooterLabel = '與普通機車共用';
+
+/// After the scooter count shown beside a heavy-bike 空位未知.
+const notForHeavyNote = '不代表重機可用格數';
+
+/// Whether every motorcycle bay of [spot] is a 普大共用格, so the lot's
+/// scooter count is the count of bays heavy bikes share (A'). Read from the
+/// data alone, the same way for the four signs, the details, the map's
+/// pills and the 「目前有位」 filter:
+/// - a lot only (street spots have no official count);
+/// - zones that say something (a condition or a legacy access; as
+///   [decideParking] reads them): at least one zone is 普大共用 and every
+///   other zone has no motorcycle bay: heavy-only or car bays, or no bay
+///   with scooters excluded. Any zone that says nothing, motorcycle bays of
+///   another kind (一般、身障、充電) or no bay without excluding scooters
+///   may hold scooter-only bays the count includes: false. Heavy-only
+///   zones never matter. [ParkingSpot.zonesComplete] is not required;
+/// - no zone says anything: the lot's own condition (or the condition its
+///   access stands for) is 普大共用.
+bool motorcycleBaysAllShared(ParkingSpot spot) {
+  if (!spot.isFacility) return false;
+  final zones = [
+    for (final z in spot.zones) z.condition ?? zoneConditionOf(z.access),
+  ];
+  if (zones.any((c) => c != null)) {
+    var shared = false;
+    for (final c in zones) {
+      if (c == null) return false;
+      if (bayKindOf(c) == BayKind.scooterHeavy) {
+        shared = true;
+      } else if (c.bay == Bay.motorcycle ||
+          (c.bay == null && c.allow?.scooter != false)) {
+        return false;
+      }
+    }
+    return shared;
+  }
+  return bayKindOf(spot.condition ?? zoneConditionOf(spot.access)) ==
+      BayKind.scooterHeavy;
+}
+
+/// Whether [count], read for [vehicle], is the scooter count standing for
+/// 普大共用格 (A'): heavy bikes reading it are marked
+/// [sharedWithScooterLabel].
+bool sharedScooterCount(VehicleType vehicle, AvailabilityVehicle? count) =>
+    vehicle == VehicleType.heavy && count == AvailabilityVehicle.scooter;
+
+bool _countShown(AvailabilitySnapshot s, DateTime now) =>
+    s.status(now) == AvailabilityStatus.fresh ||
+    s.status(now) == AvailabilityStatus.delayed;
+
+/// The count that speaks for [spot] as a whole for [vehicle] on the map
+/// (pills, 「目前有位」) and in a lot's summary without zones: the
+/// vehicle's own; for heavy bikes on a lot whose motorcycle bays are all
+/// 普大共用 ([motorcycleBaysAllShared]) the scooter count when the heavy
+/// count shows nothing (no value, stale, invalid) and the scooter count
+/// does (fresh, delayed or suspended). A heavy count that shows stays
+/// first, as on the four signs.
+AvailabilitySnapshot? lotCount(
+  ParkingSpot spot,
+  SpotAvailability availability,
+  VehicleType vehicle,
+  DateTime now,
+) {
+  final own = availability.of(availabilityVehicle(vehicle));
+  if (vehicle != VehicleType.heavy || !motorcycleBaysAllShared(spot)) {
+    return own;
+  }
+  if (own != null &&
+      (_countShown(own, now) ||
+          own.status(now) == AvailabilityStatus.suspended)) {
+    return own;
+  }
+  final scooter = availability.of(AvailabilityVehicle.scooter);
+  if (scooter != null &&
+      (_countShown(scooter, now) ||
+          scooter.status(now) == AvailabilityStatus.suspended)) {
+    return scooter;
+  }
+  return own;
+}
+
+/// The scooter count as a secondary line beside a heavy-bike 空位未知:
+/// 「普通機車區剩 N 格」 (or 已滿), with its delay. The details without zones
+/// and the zone rows both write it from here.
+String scooterCountLine(AvailabilitySnapshot scooter, DateTime now) {
+  final delay = scooter.status(now) == AvailabilityStatus.delayed
+      ? '，更新延遲 ${scooter.ageMinutes(now)} 分鐘'
+      : '';
+  return scooter.available == 0
+      ? '普通機車區已滿$delay'
+      : '普通機車區剩 ${scooter.available} 格$delay';
+}
 
 /// 「17:02」 in local time.
 String availabilityClock(DateTime value) {
@@ -160,7 +270,13 @@ List<AvailabilityCapsule> _officialCapsules(
   ParkingDecision decision,
   DateTime now,
 ) {
-  final own = availability.of(availabilityVehicle(vehicle));
+  // A heavy bike on a lot of 普大共用格 alone reads the scooter count
+  // (A', [lotCount]); the pill has no room to say so, the screen reader
+  // does. (Pending PM: whether the pill and the filter read it at all.)
+  final own = lotCount(spot, availability, vehicle, now);
+  final shared = sharedScooterCount(vehicle, own?.vehicle)
+      ? '（$sharedWithScooterLabel）'
+      : '';
   final capsules = <AvailabilityCapsule>[
     if (own != null)
       ...switch (own.status(now)) {
@@ -169,8 +285,8 @@ List<AvailabilityCapsule> _officialCapsules(
             text: _count(own.available!),
             style: own.available == 0 ? CapsuleStyle.full : CapsuleStyle.live,
             semantics: own.available == 0
-                ? '官方即時：已滿'
-                : '官方即時：剩 ${own.available} 格',
+                ? '官方即時：已滿$shared'
+                : '官方即時：剩 ${own.available} 格$shared',
           ),
         ],
         AvailabilityStatus.delayed => [
@@ -179,7 +295,8 @@ List<AvailabilityCapsule> _officialCapsules(
             style: CapsuleStyle.delayed,
             semantics:
                 '更新延遲 ${own.ageMinutes(now)} 分鐘：最後一筆'
-                '${own.available == 0 ? '已滿' : '剩 ${own.available} 格'}',
+                '${own.available == 0 ? '已滿' : '剩 ${own.available} 格'}'
+                '$shared',
           ),
         ],
         AvailabilityStatus.suspended => [
@@ -306,8 +423,6 @@ AvailabilityFact availabilityFact(
 ) {
   final eligibility = decision.status;
   const title = '有沒有位';
-  String? capacity(AvailabilitySnapshot own) =>
-      own.total == null ? null : '／ 共 ${own.total} 格（${vehicle.label}）';
   // No count where the rider may not park, so it never reads as an
   // invitation (canvas v30).
   if (eligibility == EligibilityStatus.notAllowed) {
@@ -317,8 +432,20 @@ AvailabilityFact availabilityFact(
       caption: '${vehicle.label}不能停這個場站',
     );
   }
-  final own = availability.of(availabilityVehicle(vehicle));
+  // A heavy bike on a lot of 普大共用格 alone reads the scooter count
+  // there (A', [lotCount]), named as shared.
+  final own = lotCount(spot, availability, vehicle, now);
+  final shared = sharedScooterCount(vehicle, own?.vehicle);
   final notes = _notes(spot, availability, vehicle, decision, own, now);
+  // Whose bays: the vehicle's, or the shared ones (named in the caption).
+  String? capacity(AvailabilitySnapshot own) => own.total == null
+      ? null
+      : shared
+      ? '／ 共 ${own.total} 格'
+      : '／ 共 ${own.total} 格（${vehicle.label}）';
+  String withShared(String caption) => shared
+      ? [caption, sharedWithScooterLabel].where((t) => t.isNotEmpty).join(' ・ ')
+      : caption;
   final staticTotal =
       own?.capacity ??
       (vehicle == VehicleType.scooter && (spot.scooterTotal ?? 0) > 0
@@ -336,7 +463,7 @@ AvailabilityFact availabilityFact(
         count: own.available,
         headline: full ? '剩餘，已滿' : '剩餘',
         capacity: capacity(own),
-        caption: source,
+        caption: withShared(source),
         notes: notes,
       );
     case AvailabilityStatus.delayed:
@@ -347,9 +474,10 @@ AvailabilityFact availabilityFact(
             '剩餘${own.available == 0 ? '，已滿' : ''}，'
             '更新延遲 ${own.ageMinutes(now)} 分鐘',
         capacity: capacity(own),
-        caption:
-            '最後更新 ${availabilityClock(own.sourceUpdatedAt!)}　'
-            '${own.provider}',
+        caption: withShared(
+          '最後更新 ${availabilityClock(own.sourceUpdatedAt!)}　'
+          '${own.provider}',
+        ),
         notes: notes,
       );
     case AvailabilityStatus.stale:
@@ -426,13 +554,13 @@ List<AvailabilityNote> _notes(
             : '汽車格剩餘 ${car.available}${delay(car)}',
         '${time(car)} ・ ${car.provider}',
       ),
-    // Another class's count only when this class has none to show.
-    if (!shown(own) && shown(scooter))
+    // Another class's count only when this class has none to show. The
+    // scooter count standing as the answer (A', [lotCount]) is not
+    // repeated.
+    if (!shown(own) && shown(scooter) && !identical(own, scooter))
       AvailabilityNote(
-        scooter!.available == 0
-            ? '普通機車區已滿${delay(scooter)}'
-            : '普通機車區剩 ${scooter.available} 格${delay(scooter)}',
-        '${time(scooter)} ・ ${scooter.provider} ・ 不代表重機可用格數',
+        scooterCountLine(scooter!, now),
+        '${time(scooter)} ・ ${scooter.provider} ・ $notForHeavyNote',
       ),
   ];
 }
@@ -473,7 +601,8 @@ AvailabilityExclusion? availabilityExclusion(
 ) {
   if (filter == AvailabilityFilter.off) return null;
   if (!spot.isFacility) return AvailabilityExclusion.roadside;
-  final own = availability.of(availabilityVehicle(vehicle));
+  // The same count as the pills (A', [lotCount]).
+  final own = lotCount(spot, availability, vehicle, now);
   switch (own?.status(now)) {
     case null:
     case AvailabilityStatus.unavailable:

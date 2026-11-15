@@ -14,6 +14,12 @@ import '../models/parking.dart';
 import '../models/parking_condition.dart';
 import '../models/space_kind.dart';
 import '../models/zone_entries.dart';
+import 'availability_display.dart'
+    show
+        notForHeavyNote,
+        scooterCountLine,
+        sharedScooterCount,
+        sharedWithScooterLabel;
 import 'eligibility.dart';
 import 'four_sign.dart';
 import 'four_sign_display.dart';
@@ -576,16 +582,47 @@ SeatRow _seatRow(
       officialNote: [
         if (delayed) '更新延遲',
         if (at != null) agoText(at, now),
+        // The scooter count on 普大共用格 (A'): scooters park there too.
+        if (sharedScooterCount(s.vehicle, a.countClass)) sharedWithScooterLabel,
       ].join('・'),
     );
   }
   final total = a.total ?? snapshot?.capacity;
+  final official = total == null ? '空位未知' : '共 $total 格';
+  final officialNote = total == null ? '' : '空位未知';
+  // A 普大共用 zone of a lot that also has scooter-only bays (A'): no
+  // count for heavy bikes, the scooter count beside it as the summary
+  // without zones writes it, never standing for heavy bikes.
+  final scooter = availability.of(AvailabilityVehicle.scooter);
+  if (!s.street &&
+      s.vehicle == VehicleType.heavy &&
+      a.countClass == null &&
+      a.bayKind == BayKind.scooterHeavy &&
+      scooter != null &&
+      _shown(scooter, now)) {
+    final at = scooter.sourceUpdatedAt;
+    return SeatRow(
+      area: a,
+      name: detailPlaceName(a),
+      sub: sub,
+      official: official,
+      officialNote: [
+        ?(officialNote.isEmpty ? null : officialNote),
+        scooterCountLine(scooter, now),
+        [
+          if (at != null && scooter.status(now) == AvailabilityStatus.fresh)
+            agoText(at, now),
+          notForHeavyNote,
+        ].join('・'),
+      ].join('\n'),
+    );
+  }
   return SeatRow(
     area: a,
     name: detailPlaceName(a),
     sub: sub,
-    official: total == null ? '空位未知' : '共 $total 格',
-    officialNote: total == null ? '' : '空位未知',
+    official: official,
+    officialNote: officialNote,
   );
 }
 
