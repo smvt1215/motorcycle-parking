@@ -39,6 +39,10 @@ const lookupTurnedOff = '已關閉自動查詢';
 const lookupOffNote = '自動查詢已關閉。請自己選縣市與行政區。';
 const lookupTurnOn = '開啟自動查詢';
 
+/// Under the county and district while the lookups are off and the marker
+/// moved since they were picked or looked up (Q462-1 C).
+const lookupMovedNote = '標記移動了，請確認縣市與行政區';
+
 // P10b: 帳號與設定 › 隱私.
 
 const settingsLookup = '選點時自動查縣市與門牌';

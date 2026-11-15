@@ -1010,8 +1010,9 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   late double lat = widget.spot.lat, lng = widget.spot.lng;
 
   /// The county or city and district of the position (S6): today's until
-  /// the marker moves, then the lookup's or the rider's pick. Unset while
-  /// unknown, so a move never sends the old position's.
+  /// the marker moves, then the lookup's or the rider's pick. With the
+  /// lookups on, unset while unknown, so a move never sends the old
+  /// position's; with them off a move keeps them (Q462-1 C).
   late String? newCity = taiwanCities.contains(widget.spot.city)
       ? widget.spot.city
       : null;
@@ -1020,6 +1021,16 @@ class _SuggestionFormState extends State<_SuggestionForm> {
   String? lookupProblem;
   Timer? lookupTimer;
   int lookupRound = 0;
+
+  /// The marker moved since the county and district were picked or looked
+  /// up, so they may belong to the old position.
+  bool townUnchecked = false;
+
+  /// Says so under them while nothing looks them up (Q462-1 C).
+  bool get showsMovedNote =>
+      townUnchecked &&
+      !autoLookup &&
+      (newCity != null || newDistrict.isNotEmpty);
 
   /// The door shown under the map; null where none may be shown.
   ApproxAddressController? approx;
@@ -1048,13 +1059,17 @@ class _SuggestionFormState extends State<_SuggestionForm> {
     setState(() {
       lat = a;
       lng = b;
-      newCity = null;
-      newDistrict = '';
+      townUnchecked = true;
+      // The lookup brings the new position's; without it (#462) the county
+      // and district stay, with a note to check them (Q462-1 C).
+      if (autoLookup) {
+        newCity = null;
+        newDistrict = '';
+      }
       lookupProblem = null;
     });
     approx?.moved(a, b);
-    // Nothing leaves the device until the rider agreed (#462); the county
-    // and district are then the rider's to pick.
+    // Nothing leaves the device until the rider agreed (#462).
     if (autoLookup) _lookUpTown();
   }
 
@@ -1085,6 +1100,7 @@ class _SuggestionFormState extends State<_SuggestionForm> {
           if (town != null && taiwanCities.contains(town.city)) {
             newCity = town.city;
             newDistrict = town.district;
+            townUnchecked = false;
           } else {
             lookupProblem = '查不到縣市與行政區，請在上方確認縣市。';
           }
@@ -1820,12 +1836,15 @@ class _SuggestionFormState extends State<_SuggestionForm> {
                           // The district belonged to the old city.
                           if (v != newCity) newDistrict = '';
                           newCity = v;
+                          townUnchecked = false;
                         }),
                         onDistrict: (v) => setState(() {
                           _stopLookup();
                           newDistrict = v ?? '';
+                          townUnchecked = false;
                         }),
                       ),
+                      if (showsMovedNote) const TownMovedNote(),
                       if (autoLookup)
                         LookupAutoRow(onTurnOff: turnOffLookup)
                       else if (!asksConsent) ...[
