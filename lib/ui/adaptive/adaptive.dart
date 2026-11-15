@@ -598,12 +598,11 @@ Future<T?> showAdaptiveSheet<T>(
   Widget content(BuildContext ctx) =>
       detail ? builder(ctx) : SheetKeyboardDismissal(child: builder(ctx));
   // On a tablet a sheet that asks for it takes the side panel's place
-  // (A7c ⑦⑧) instead of rising across the whole window.
+  // (A7c ⑦⑧, P16b ④⑤) instead of rising across the whole window.
   if (sidePanel && !detail && isTabletLayout(context)) {
-    return Navigator.of(
-      context,
-      rootNavigator: true,
-    ).push<T>(SidePanelRoute<T>(builder: content));
+    return Navigator.of(context, rootNavigator: true).push<T>(
+      SidePanelRoute<T>(builder: content, nested: SidePanelScope.isIn(context)),
+    );
   }
   if (isCupertino) {
     // Overlay the map: Cupertino's stacked-card route scales the page below.
