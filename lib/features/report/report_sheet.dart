@@ -110,6 +110,8 @@ Future<void> showReport(
   (ctx) => FormFlow(
     child: ReportForm(store: store, lat: lat, lng: lng, mapCenter: mapCenter),
   ),
+  // P16b ④⑤: on a tablet in the side panel's place.
+  sidePanel: true,
 );
 
 /// The county or city and district under the picker, side by side, stacked

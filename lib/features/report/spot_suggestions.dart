@@ -147,6 +147,8 @@ Future<void> showSpotSuggestions(
         child: SuggestionListPage(store: store, spot: spot),
       ),
     ),
+    // S6t: on a tablet in the side panel's place, as are its pages.
+    sidePanel: true,
   );
   final count = session.sent.length;
   session.dispose();
@@ -879,6 +881,8 @@ Future<void> _showSuggestionForm(
       closeWhenSent: session != null,
       onSubmitted: () => submitted = true,
     ),
+    // On a tablet over the list's panel, or the details' when opened alone.
+    sidePanel: true,
   );
   // Cancelling or a failed request keeps the list as it was.
   if (!submitted || !context.mounted) return;
