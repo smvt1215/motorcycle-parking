@@ -22,7 +22,12 @@ class LocationRationaleCard extends StatelessWidget {
   static const title = '用你的位置找附近的停車點';
   static const intro = '接下來系統會問你，要不要讓「機車停車指南」使用位置。位置會用在這三件事：';
   static const uses = [
-    (Icons.near_me_outlined, '地圖定位與附近排序', '顯示你在哪裡，並依距離排列停車點。只在手機上計算，不會上傳。'),
+    (
+      Icons.near_me_outlined,
+      '地圖定位與附近排序',
+      // The viewport around the rider still goes to the server (#476).
+      '顯示你在哪裡，並依距離排列停車點。你的座標只在手機上計算；地圖移到你附近後，這一帶的範圍會送到我們的伺服器讀取停車點。',
+    ),
     (Icons.local_parking, '記錄停車位置', '記下你把車停在哪裡，只存在這支手機。'),
     (
       Icons.add_location_alt_outlined,

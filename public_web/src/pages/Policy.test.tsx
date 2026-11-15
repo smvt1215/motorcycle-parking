@@ -77,6 +77,18 @@ describe('/privacy', () => {
     expect(main).not.toHaveTextContent('31 天');
     expect(main).not.toHaveTextContent('測試環境 1 天、正式環境 7 天');
     expect(main).not.toHaveTextContent('之後改成固定值');
+    expect(main).toHaveTextContent('這是原始 IP，不是雜湊');
+    expect(main).toHaveTextContent('在那台裝置登出時刪除');
+    expect(main).toHaveTextContent('刪除帳號網頁的嘗試紀錄');
+    expect(main).toHaveTextContent('1 小時後刪除');
+  });
+
+  it('says when 1.6 takes effect and that 1.5 applies until then (#461)', () => {
+    open();
+    expect(privacy.effective > privacy.updated).toBe(true);
+    expect(screen.getByRole('note')).toHaveTextContent(
+      `本版自 ${dateLabel(privacy.effective)}生效，在那之前適用 1.5 版。`,
+    );
   });
 
   it('keeps addresses as text and links the site within the app (#295)', () => {
