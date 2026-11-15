@@ -3,6 +3,7 @@ import Markdown, { type Components } from 'react-markdown';
 import { Link } from 'react-router';
 import remarkGfm from 'remark-gfm';
 import { dateLabel, sectionId, sections, type Policy } from '../legal/policies';
+import { beforeEffective, changeId, markChanges, policyDiff } from '../legal/policyDiff';
 import { Site } from '../ui/Site';
 import './Policy.css';
 
@@ -24,7 +25,22 @@ function textOf(node: ReactNode): string {
  * beside the text from 1040px, collapsible above it below), then the text.
  */
 export function PolicyPage({ policy }: { policy: Policy }) {
-  const toc = sections(policy.markdown);
+  // Until the new version takes effect (Taiwan's calendar day, in this
+  // browser), the version in force is shown with the new one's changes.
+  const previous =
+    policy.previous && beforeEffective(policy.effective, new Date()) ? policy.previous : undefined;
+  const diff = previous ? policyDiff(previous.markdown, policy.markdown) : undefined;
+  const markdown = diff ? diff.markdown : policy.markdown;
+  const from = dateLabel(policy.effective);
+  const rehypePlugins = diff
+    ? [
+        markChanges({
+          ins: `${policy.version} 新增・${from}起生效`,
+          del: `${policy.version} 刪除・${from}起不再適用`,
+        }),
+      ]
+    : [];
+  const toc = sections(markdown);
   const components: Components = {
     h2({ children }) {
       const index = toc.indexOf(textOf(children).trim());
@@ -77,14 +93,26 @@ export function PolicyPage({ policy }: { policy: Policy }) {
             <dl className="policy-meta">
               <div>
                 <dt>版本</dt>
-                <dd>{policy.version}</dd>
+                <dd>{previous ? previous.version : policy.version}</dd>
               </div>
               <div>
                 <dt>生效日期</dt>
                 <dd>
-                  <time dateTime={policy.effective}>{dateLabel(policy.effective)}</time>
+                  {previous ? (
+                    <time dateTime={previous.effective}>{dateLabel(previous.effective)}</time>
+                  ) : (
+                    <time dateTime={policy.effective}>{from}</time>
+                  )}
                 </dd>
               </div>
+              {previous && (
+                <div>
+                  <dt>下一版</dt>
+                  <dd>
+                    {policy.version}，<time dateTime={policy.effective}>{from}</time>生效
+                  </dd>
+                </div>
+              )}
               <div>
                 <dt>最後更新</dt>
                 <dd>
@@ -95,14 +123,31 @@ export function PolicyPage({ policy }: { policy: Policy }) {
             <p className="policy-notice" role="note">
               {policy.notice}
             </p>
+            {previous && diff && (
+              <section className="policy-notice policy-diff-notice" aria-label={`${policy.version} 版的修改`}>
+                <p>
+                  以下標示「{policy.version} 新增」與「{policy.version} 刪除」的地方是 {policy.version}{' '}
+                  版的修改，自 {from}起生效；在那之前適用 {previous.version}{' '}
+                  版，也就是保留標示「刪除」的文字、不含標示「新增」的文字。
+                </p>
+                <p className="policy-diff-jump">
+                  共 {diff.changes} 處修改，跳到：
+                  {Array.from({ length: diff.changes }, (_, i) => (
+                    <a key={i} href={`#${changeId(i + 1)}`} aria-label={`第 ${i + 1} 處修改`}>
+                      {i + 1}
+                    </a>
+                  ))}
+                </p>
+              </section>
+            )}
           </div>
           <details className="policy-toc policy-toc--top" open>
             <summary>目錄（{toc.length} 節）</summary>
             <nav aria-label="目錄">{contents}</nav>
           </details>
           <div className="policy-text">
-            <Markdown remarkPlugins={[remarkGfm]} components={components}>
-              {policy.markdown}
+            <Markdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={components}>
+              {markdown}
             </Markdown>
           </div>
         </article>

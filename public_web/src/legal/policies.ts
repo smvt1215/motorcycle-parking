@@ -1,6 +1,7 @@
 // The published policies: their text lives in Markdown next to this file so a
 // revision (e.g. after the lawyer's review) only swaps the file and bumps the
 // version and dates here.
+import privacyPrevious from './privacy-1.5.md?raw';
 import privacyText from './privacy.md?raw';
 import termsText from './terms.md?raw';
 
@@ -14,6 +15,11 @@ export interface Policy {
   markdown: string;
   /** The notice above the text until the professional review is done (user, 2026-11-07). */
   notice: string;
+  /**
+   * The version in force until [effective]: until then the page shows it,
+   * with this version's changes marked like a Git diff (user, 2026-11-15).
+   */
+  previous?: { version: string; effective: string; markdown: string };
 }
 
 /** User decisions 2026-11-07 (PM_ANS Q_PRIVACY_PAGE): version 1.0, dated the day it goes live. */
@@ -26,7 +32,8 @@ export const privacy: Policy = {
   updated: '2026-11-15',
   markdown: privacyText,
   notice:
-    '這份政策尚待專業人士審閱，之後可能調整。調整時會更新版本與生效日期，並在「十二、政策修改」說明改了什麼。本版自 2026 年 11 月 22 日生效，在那之前適用 1.5 版。',
+    '這份政策尚待專業人士審閱，之後可能調整。調整時會更新版本與生效日期，並在「十二、政策修改」說明改了什麼。',
+  previous: { version: '1.5', effective: '2026-11-13', markdown: privacyPrevious },
 };
 
 /** The privacy policy's layout and the same notice (PM 2026-11-07). */

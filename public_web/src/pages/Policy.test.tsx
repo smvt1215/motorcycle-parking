@@ -8,7 +8,20 @@ function open() {
   return openSite('/privacy', null);
 }
 
+/** Taiwan midnight starting [day]. */
+const taipei = (day: string, time = '00:00:00') => new Date(`${day}T${time}+08:00`);
+
 describe('/privacy', () => {
+  // The version in force from its effective day; the announcement period
+  // before it is tested on its own below.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(taipei(privacy.effective));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('shows the title, version, dates and the review notice', () => {
     open();
     expect(screen.getByRole('heading', { level: 1, name: '隱私權政策' })).toBeInTheDocument();
@@ -83,12 +96,21 @@ describe('/privacy', () => {
     expect(main).toHaveTextContent('1 小時後刪除');
   });
 
-  it('says when 1.6 takes effect and that 1.5 applies until then (#461)', () => {
+  it('shows the clean new version from its effective day on, Taiwan time (#475)', () => {
     open();
-    expect(privacy.effective > privacy.updated).toBe(true);
-    expect(screen.getByRole('note')).toHaveTextContent(
-      `本版自 ${dateLabel(privacy.effective)}生效，在那之前適用 1.5 版。`,
+    const main = screen.getByRole('main');
+    expect(main.querySelector('ins, del')).toBeNull();
+    expect(screen.queryByText(/處修改，跳到/)).toBeNull();
+    expect(screen.queryByText('下一版')).toBeNull();
+    expect(document.querySelector('.policy-meta')).toHaveTextContent(
+      `版本${privacy.version}生效日期${dateLabel(privacy.effective)}`,
     );
+  });
+
+  it('stays on the clean new version after its effective day', () => {
+    vi.setSystemTime(new Date('2026-12-31T12:00:00Z'));
+    open();
+    expect(screen.getByRole('main').querySelector('ins, del')).toBeNull();
   });
 
   it('keeps addresses as text and links the site within the app (#295)', () => {
@@ -274,5 +296,73 @@ describe('the published text', () => {
     expect(privacy.markdown).not.toContain('OpenStreetMap');
     expect(privacy.markdown).toContain('至少 7 天');
     expect(privacy.markdown).toContain('日本東京（AWS ap-northeast-1）');
+  });
+});
+
+describe('/privacy before the new version takes effect (#475)', () => {
+  const previous = privacy.previous!;
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    // The last second before Taiwan's effective day.
+    vi.setSystemTime(new Date(taipei(privacy.effective).getTime() - 1000));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('shows the version in force, with the next version and its effective day', () => {
+    open();
+    expect(privacy.effective > privacy.updated).toBe(true);
+    const meta = document.querySelector<HTMLElement>('.policy-meta')!;
+    expect(within(meta).getByText(previous.version)).toBeInTheDocument();
+    expect(meta).toHaveTextContent(dateLabel(previous.effective));
+    expect(meta).toHaveTextContent(`下一版${privacy.version}，${dateLabel(privacy.effective)}生效`);
+    const notice = screen.getByRole('region', { name: `${privacy.version} 版的修改` });
+    expect(notice).toHaveTextContent(
+      `自 ${dateLabel(privacy.effective)}起生效；在那之前適用 ${previous.version} 版`,
+    );
+  });
+
+  it('marks the changes with <ins>/<del> and a label in words next to each', () => {
+    open();
+    const main = screen.getByRole('main');
+    const added = main.querySelectorAll('ins');
+    const deleted = main.querySelectorAll('del');
+    expect(added.length).toBeGreaterThan(0);
+    expect(deleted.length).toBeGreaterThan(0);
+    for (const mark of [...added, ...deleted]) {
+      const block = mark.closest('.policy-diff')!;
+      expect(block).not.toBeNull();
+      const label = block.querySelector('.policy-diff-tag')!;
+      expect(label.textContent).toContain(dateLabel(privacy.effective));
+      expect(label.textContent).toMatch(mark.tagName === 'INS' ? /新增/ : /刪除/);
+      // Never struck through or colored only: the label is outside the mark.
+      expect(mark.contains(label)).toBe(false);
+    }
+    // What 1.6 removes is still readable, marked as deleted …
+    const struck = [...deleted].map((d) => d.textContent).join('\n');
+    expect(struck).toContain('不上傳座標');
+    // … and what it adds is marked as added.
+    expect([...added].map((d) => d.textContent).join('\n')).toContain('都要你同意「自動查詢」後才會進行');
+    // No marker character leaks into the page.
+    expect(main.textContent).not.toMatch(/[\uE000-\uE002]/);
+  });
+
+  it('links to every run of changes', () => {
+    open();
+    const jump = screen.getByText(/處修改，跳到/);
+    const links = within(jump).getAllByRole('link');
+    expect(links.length).toBeGreaterThan(1);
+    links.forEach((link, index) => {
+      expect(link).toHaveAccessibleName(`第 ${index + 1} 處修改`);
+      const id = link.getAttribute('href')!.slice(1);
+      expect(document.getElementById(id)).toHaveClass('policy-diff');
+    });
+  });
+
+  it('keeps the table of contents and every section', () => {
+    open();
+    expect(sections(privacy.markdown)).toEqual(sections(previous.markdown));
+    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(sections(privacy.markdown).length);
   });
 });

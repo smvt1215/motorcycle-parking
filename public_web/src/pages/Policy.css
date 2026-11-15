@@ -254,3 +254,79 @@
     color: var(--brand-deep);
   }
 }
+
+/* The next version's changes over the current text (user, 2026-11-15): a
+   label in words and <ins>／<del>, so neither color nor strike-through is
+   the only sign. */
+.policy-diff-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.policy-diff-notice p {
+  margin: 0;
+}
+.policy-diff-jump {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+}
+.policy-diff-jump a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  border-radius: 8px;
+  background: var(--paper);
+  font-weight: 700;
+}
+.policy-text .policy-diff {
+  scroll-margin-top: 16px;
+}
+.policy-text p.policy-diff,
+.policy-text li.policy-diff,
+.policy-text h3.policy-diff,
+.policy-text h2.policy-diff {
+  padding: 6px 10px;
+  border-left: 4px solid;
+  border-radius: 4px;
+}
+.policy-text .policy-diff--ins {
+  border-color: var(--brand);
+  background: var(--brand-tint);
+}
+.policy-text .policy-diff--del {
+  border-color: var(--danger);
+  background: var(--danger-tint);
+}
+.policy-table tr.policy-diff--ins td:first-child {
+  box-shadow: inset 4px 0 0 var(--brand);
+  padding-left: 10px;
+}
+.policy-table tr.policy-diff--del td:first-child {
+  box-shadow: inset 4px 0 0 var(--danger);
+  padding-left: 10px;
+}
+.policy-text ins {
+  text-decoration: none;
+}
+.policy-text del {
+  color: var(--ink-soft);
+  text-decoration: line-through;
+  text-decoration-color: var(--danger);
+}
+.policy-diff-tag {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+.policy-diff--ins .policy-diff-tag {
+  color: var(--brand-deep);
+}
+.policy-diff--del .policy-diff-tag {
+  color: var(--danger);
+}
