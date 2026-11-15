@@ -348,7 +348,8 @@ class AdaptiveScaffold extends StatelessWidget {
                 ),
               ],
             ),
-      body: child,
+      // What opens from the page may take the side panel's place.
+      body: SidePanelHost(child: child),
       bottomNavigationBar: bar == null
           ? null
           : tablet

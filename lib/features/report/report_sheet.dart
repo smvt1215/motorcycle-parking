@@ -1262,7 +1262,12 @@ class _ReportFormState extends State<ReportForm> {
 }
 
 Future<void> showParkingForm(BuildContext context, AppStore store) =>
-    showAdaptiveSheet<void>(context, (ctx) => ParkingForm(store: store));
+    showAdaptiveSheet<void>(
+      context,
+      (ctx) => ParkingForm(store: store),
+      // On a tablet in the side panel's place, as the other forms are.
+      sidePanel: sidePanelHost(context),
+    );
 
 class ParkingForm extends StatefulWidget {
   const ParkingForm({super.key, required this.store});

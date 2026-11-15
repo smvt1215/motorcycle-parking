@@ -197,7 +197,12 @@ class _ConsentLink extends StatelessWidget {
 /// A provider picker for compact entry points, dismissed after authentication.
 Future<void> showSignIn(BuildContext context, AppStore store) async {
   if (store.canReport) return;
-  await showAdaptiveSheet<void>(context, (_) => SignInSheet(store: store));
+  await showAdaptiveSheet<void>(
+    context,
+    (_) => SignInSheet(store: store),
+    // On a tablet in the side panel's place, over the form that asked.
+    sidePanel: sidePanelHost(context),
+  );
 }
 
 /// 登入 (P11, P16a): the title and intro scroll when large text needs it,

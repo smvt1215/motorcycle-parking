@@ -27,6 +27,8 @@ Future<void> showProfileEditor(BuildContext context, AppStore store) {
   return showAdaptiveSheet<void>(
     context,
     (_) => ProfileEditor(store: store, status: status),
+    // P12: on a tablet in the side panel's place.
+    sidePanel: sidePanelHost(context),
   );
 }
 

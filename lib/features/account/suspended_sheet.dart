@@ -26,6 +26,8 @@ Future<void> showSuspendedSheet(
 }) => showAdaptiveSheet<void>(
   context,
   (_) => SuspendedPanel(until: until, untilKnown: untilKnown),
+  // P18a: on a tablet in the panel the form is in.
+  sidePanel: sidePanelHost(context),
 );
 
 class SuspendedPanel extends StatelessWidget {
