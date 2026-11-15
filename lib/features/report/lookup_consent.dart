@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/policy_links.dart';
 import '../../domain/lookup_consent_display.dart';
 import '../../ui/adaptive/adaptive.dart';
+import '../../ui/location_picker.dart';
 
 double get _target => isCupertino ? 44 : 48;
 
@@ -302,6 +303,24 @@ void showLookupTurnedOff(BuildContext context) {
       View.of(context),
       lookupTurnedOff,
       Directionality.of(context),
+    ),
+  );
+}
+
+/// Under the county and district while the lookups are off and the marker
+/// moved since they were picked or looked up (Q462-1 C): they are kept, and
+/// may belong to the old position. Spoken when it appears.
+class TownMovedNote extends StatelessWidget {
+  const TownMovedNote({super.key});
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+    liveRegion: true,
+    child: const LocationNote(
+      key: ValueKey('lookup-moved'),
+      icon: Icons.edit_location_outlined,
+      text: lookupMovedNote,
+      tone: NoteTone.caution,
     ),
   );
 }
