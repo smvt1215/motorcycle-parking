@@ -173,16 +173,53 @@ class SidePanelSlot extends StatelessWidget {
   );
 }
 
+/// Marks what a [SidePanelRoute] shows, so a sheet opened from inside it
+/// knows a panel and its scrim are already there.
+class SidePanelScope extends InheritedWidget {
+  const SidePanelScope({super.key, required super.child});
+
+  /// Whether [context] is inside a sheet shown in the panel's place.
+  static bool isIn(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<SidePanelScope>() != null;
+
+  @override
+  bool updateShouldNotify(SidePanelScope oldWidget) => false;
+}
+
+/// Marks the app's shell page: the map, the tab panels and the details
+/// beside it, which on a tablet keep to the panel column.
+class SidePanelHost extends InheritedWidget {
+  const SidePanelHost({super.key, required super.child});
+
+  @override
+  bool updateShouldNotify(SidePanelHost oldWidget) => false;
+}
+
+/// Whether a sheet opened from [context] belongs in the panel's place: from
+/// inside a sheet already there, or from the shell page. A page of its own
+/// (刪除帳號, 已隱藏的車友, the notice after a deletion request) or a sheet
+/// across the window (帳號與設定) has no panel column to keep to, so what
+/// opens from it stays the sheet a phone shows.
+bool sidePanelHost(BuildContext context) =>
+    SidePanelScope.isIn(context) ||
+    context.getInheritedWidgetOfExactType<SidePanelHost>() != null;
+
 /// A sheet shown in the tablet panel's place (A7c ⑦⑧, P16b ④⑤): the scrim
 /// over the whole window, the panel rising from the bottom of its column.
 /// Tapping the scrim or going back closes it.
 class SidePanelRoute<T> extends PopupRoute<T> {
-  SidePanelRoute({required this.builder, super.settings});
+  SidePanelRoute({required this.builder, this.nested = false, super.settings});
   final WidgetBuilder builder;
+
+  /// Opened from a sheet already in the panel's place (a form's own sheet
+  /// over its list, S2 over S1): it covers that panel exactly, and the
+  /// window keeps the one scrim instead of darkening twice.
+  final bool nested;
 
   /// The boards' scrim, rgba(22,49,58,.38).
   @override
-  Color get barrierColor => const Color(0x6116313a);
+  Color get barrierColor =>
+      nested ? const Color(0x00000000) : const Color(0x6116313a);
 
   @override
   bool get barrierDismissible => true;
@@ -202,7 +239,12 @@ class SidePanelRoute<T> extends PopupRoute<T> {
     Animation<double> animation,
     Animation<double> secondaryAnimation,
   ) {
-    final content = KeyedSubtree(key: _content, child: builder(context));
+    final content = KeyedSubtree(
+      key: _content,
+      // The builder's own context is inside the scope, so a sheet it opens
+      // knows where it is.
+      child: SidePanelScope(child: Builder(builder: builder)),
+    );
     // The window's own insets hold inside the panel: the keyboard and the
     // home indicator.
     Widget surface(Widget child) => Semantics(

@@ -93,6 +93,8 @@ Future<bool> showContentReport(
         onHidden: () => hidden = true,
       ),
     ),
+    // P17b ④: on a tablet in the side panel's place, which sets its height.
+    sidePanel: sidePanelHost(context),
   );
   return hidden;
 }

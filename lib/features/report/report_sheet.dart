@@ -110,6 +110,8 @@ Future<void> showReport(
   (ctx) => FormFlow(
     child: ReportForm(store: store, lat: lat, lng: lng, mapCenter: mapCenter),
   ),
+  // P16b ④⑤: on a tablet in the side panel's place.
+  sidePanel: true,
 );
 
 /// The county or city and district under the picker, side by side, stacked
@@ -1260,7 +1262,12 @@ class _ReportFormState extends State<ReportForm> {
 }
 
 Future<void> showParkingForm(BuildContext context, AppStore store) =>
-    showAdaptiveSheet<void>(context, (ctx) => ParkingForm(store: store));
+    showAdaptiveSheet<void>(
+      context,
+      (ctx) => ParkingForm(store: store),
+      // On a tablet in the side panel's place, as the other forms are.
+      sidePanel: sidePanelHost(context),
+    );
 
 class ParkingForm extends StatefulWidget {
   const ParkingForm({super.key, required this.store});
