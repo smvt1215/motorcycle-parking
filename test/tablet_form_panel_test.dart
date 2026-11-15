@@ -5,6 +5,7 @@ import 'package:motorcycle_parking/core/address_search.dart';
 import 'package:motorcycle_parking/core/town_lookup.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
+import 'package:motorcycle_parking/domain/lookup_consent_display.dart';
 import 'package:motorcycle_parking/features/map/map_legend.dart';
 import 'package:motorcycle_parking/features/report/entry_pages.dart';
 import 'package:motorcycle_parking/features/report/form_parts.dart';
@@ -299,6 +300,47 @@ void main() {
       expect(card, findsNothing);
       expect(_panel(tester), panel);
     }, variant: _platforms);
+
+    for (final form in _Form.values) {
+      testWidgets('${form.name}：沒開自動查詢時移動標記（#462 Q462-1 C），'
+          '「標記移動了」的提醒在面板內完整顯示，縣市與區留著', (tester) async {
+        const size = Size(820, 1180);
+        await _open(tester, form, size: size);
+        if (form == _Form.suggestions) {
+          await tester.tap(find.text('位置'));
+          await tester.pumpAndSettle();
+          await _rest(tester);
+        }
+        final panel = _panel(tester);
+        final fields = tester.widget<TownFields>(find.byType(TownFields).last);
+        fields.onCity('新北市');
+        fields.onDistrict('板橋區');
+        await tester.pumpAndSettle();
+        final dynamic state = tester.state(
+          form == _Form.report
+              ? find.byType(ReportForm)
+              : find.byWidgetPredicate(
+                  (w) => '${w.runtimeType}' == '_SuggestionForm',
+                ),
+        );
+        state.move(25.0343, 121.5629);
+        await _rest(tester);
+        expect(tester.takeException(), isNull);
+        final note = find.text(lookupMovedNote);
+        await tester.ensureVisible(note);
+        await tester.pumpAndSettle();
+        expect(note.hitTestable(), findsOneWidget);
+        _expectInside(tester, note, panel);
+        expect(
+          tester.widget<Text>(note).overflow,
+          isNot(TextOverflow.ellipsis),
+        );
+        final town = tester.widget<TownFields>(find.byType(TownFields).last);
+        expect(town.city, '新北市');
+        expect(town.district, '板橋區');
+        expect(_panel(tester), panel);
+      }, variant: _platforms);
+    }
 
     testWidgets('還沒問過定位時按「移到我的位置」（#469）：說明卡升起，繼續後回到面板內的表單', (tester) async {
       const size = Size(1180, 820);
