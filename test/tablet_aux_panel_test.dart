@@ -86,9 +86,21 @@ Future<void> _pump(
   Size? device,
   double scale = 1,
   Brightness brightness = Brightness.light,
+  bool shell = true,
   required Future<void> Function(BuildContext context) open,
 }) async {
   _size(tester, size, device: device);
+  final page = Scaffold(
+    body: Builder(
+      builder: (context) => Align(
+        alignment: Alignment.topRight,
+        child: TextButton(
+          onPressed: () => open(context),
+          child: const Text('開啟'),
+        ),
+      ),
+    ),
+  );
   await tester.pumpWidget(
     MaterialApp(
       theme: ThemeData(brightness: brightness),
@@ -98,17 +110,8 @@ Future<void> _pump(
         // ignore: deprecated_member_use
         child: MaterialUiCompatibilityBridge(child: child!),
       ),
-      home: Scaffold(
-        body: Builder(
-          builder: (context) => Align(
-            alignment: Alignment.topRight,
-            child: TextButton(
-              onPressed: () => open(context),
-              child: const Text('開啟'),
-            ),
-          ),
-        ),
-      ),
+      // The shell marks its page; what opens from it may take the panel.
+      home: shell ? SidePanelHost(child: page) : page,
     ),
   );
   await tester.tap(find.text('開啟'));
@@ -426,6 +429,19 @@ void main() {
   });
 
   group('不在面板欄的畫面上', () {
+    testWidgets('平板：自成一頁的畫面（申請刪除後的通知頁）開登入，照舊是底部 sheet', (tester) async {
+      final store = await _store(tester, signedIn: false);
+      await _pump(
+        tester,
+        size: const Size(1180, 820),
+        shell: false,
+        open: (context) => showSignIn(context, store),
+      );
+      expect(tester.takeException(), isNull);
+      expect(find.byType(SignInSheet), findsOneWidget);
+      expect(find.byKey(_sidePanel), findsNothing);
+    }, variant: _platforms);
+
     testWidgets('平板：從另外推上來的整頁開登入，照舊是底部 sheet', (tester) async {
       const size = Size(1180, 820);
       final store = await _store(tester, signedIn: false);
