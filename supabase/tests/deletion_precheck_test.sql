@@ -52,5 +52,25 @@ select lives_ok($$select public.deletion_precheck_attempt(repeat('a',64))$$,'the
 reset role;
 select is((select count(*)::int from private.deletion_precheck_attempts where ip_hash=repeat('a',64)),1,'attempts older than an hour are deleted');
 
+-- ===== 每小時清除（202611151000_deletion_precheck_prune.sql） =====
+select is((select schedule from cron.job where jobname='deletion-precheck-prune'),'33 * * * *','attempts are pruned hourly');
+select is((select command from cron.job where jobname='deletion-precheck-prune'),
+  'select public.deletion_precheck_attempts_prune()','and the schedule calls the prune');
+select ok(not has_function_privilege(r,'public.deletion_precheck_attempts_prune()','execute'),r||' cannot call the prune')
+  from (values ('public'),('anon'),('authenticated'),('service_role')) v(r);
+select is((select p.prosecdef and p.proconfig @> array['search_path=""']
+  from pg_proc p where p.oid='public.deletion_precheck_attempts_prune()'::regprocedure),true,
+  'the prune is a security definer with an empty search_path');
+delete from private.deletion_precheck_attempts;
+insert into private.deletion_precheck_attempts(ip_hash,created_at) values
+  (repeat('c',64),now()-interval '2 days'),
+  (repeat('c',64),now()-interval '61 minutes'),
+  (repeat('d',64),now()-interval '59 minutes'),
+  (repeat('d',64),now());
+select is(public.deletion_precheck_attempts_prune(),2,'deletes the attempts older than an hour');
+select is((select array_agg(ip_hash order by created_at) from private.deletion_precheck_attempts),
+  array[repeat('d',64),repeat('d',64)],'keeps the attempts within the hour');
+select is(public.deletion_precheck_attempts_prune(),0,'running it again deletes nothing');
+
 select * from finish();
 rollback;
