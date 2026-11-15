@@ -186,6 +186,28 @@ class SidePanelScope extends InheritedWidget {
   bool updateShouldNotify(SidePanelScope oldWidget) => false;
 }
 
+/// Whether a sheet opened from [context] belongs in the panel's place: from
+/// inside a sheet already there, or from the app's first page (the map, the
+/// tab panels and the details beside it). Over a page pushed on top of that
+/// (刪除帳號, 已隱藏的車友) or a sheet across the window (帳號與設定) there
+/// is no panel column to keep to, so it stays the sheet a phone shows.
+bool sidePanelHost(BuildContext context) {
+  if (SidePanelScope.isIn(context)) return true;
+  final root = Navigator.maybeOf(context, rootNavigator: true);
+  if (root == null) return true;
+  // The route of the root navigator that [context] is in, through any
+  // navigators nested in it.
+  var inner = context;
+  var navigator = Navigator.of(context);
+  while (navigator != root) {
+    inner = navigator.context;
+    final outer = inner.findAncestorStateOfType<NavigatorState>();
+    if (outer == null) break;
+    navigator = outer;
+  }
+  return ModalRoute.of(inner)?.isFirst ?? true;
+}
+
 /// A sheet shown in the tablet panel's place (A7c ⑦⑧, P16b ④⑤): the scrim
 /// over the whole window, the panel rising from the bottom of its column.
 /// Tapping the scrim or going back closes it.
@@ -223,7 +245,9 @@ class SidePanelRoute<T> extends PopupRoute<T> {
   ) {
     final content = KeyedSubtree(
       key: _content,
-      child: SidePanelScope(child: builder(context)),
+      // The builder's own context is inside the scope, so a sheet it opens
+      // knows where it is.
+      child: SidePanelScope(child: Builder(builder: builder)),
     );
     // The window's own insets hold inside the panel: the keyboard and the
     // home indicator.
