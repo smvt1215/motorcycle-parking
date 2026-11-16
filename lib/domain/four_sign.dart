@@ -22,8 +22,10 @@ import '../models/zone_entries.dart';
 import 'availability_display.dart'
     show
         availabilityVehicle,
+        explicitlyShared,
         heavyCarOpen,
         motorcycleBaysAllShared,
+        sharedBeatsCar,
         sharedScooterCount;
 import 'eligibility.dart';
 import 'parking_decision.dart';
@@ -683,7 +685,8 @@ BayKind? _zoneBay(ParkingZone z) => bayKindOf(_zoneCondition(z));
 /// A heavy bike on motorcycle bays has no count of its own (#222): the
 /// scooter count never stands for heavy-only bays, car bays, or motorcycle
 /// bays heavy bikes may not use. The one exception (A', 2026-11-15): on a
-/// 普大共用 zone of a lot whose motorcycle bays are all 普大共用
+/// zone whose condition states 普大共用 ([explicitlyShared]; never a
+/// legacy access alone) of a lot whose motorcycle bays are all 普大共用
 /// ([allShared], [motorcycleBaysAllShared]), the scooter count is those
 /// shared bays' count, read as such ([sharedScooterCount]), while every
 /// shared zone is open to heavy bikes now (the count covers them all). A
@@ -697,7 +700,7 @@ AvailabilityVehicle? _countClass(
   (VehicleType.heavy, Bay.heavy) => AvailabilityVehicle.heavy,
   (VehicleType.heavy, Bay.car) => AvailabilityVehicle.car,
   (VehicleType.heavy, Bay.motorcycle)
-      when allShared && _zoneBay(z) == BayKind.scooterHeavy =>
+      when allShared && explicitlyShared(z.condition) =>
     AvailabilityVehicle.scooter,
   (VehicleType.scooter, Bay.motorcycle) => AvailabilityVehicle.scooter,
   _ => null,
@@ -742,7 +745,7 @@ List<SignArea> _lotAreas(
         motorcycleBaysAllShared(spot) &&
         [
           for (final (i, zone) in spot.zones.indexed)
-            if (_zoneBay(zone) == BayKind.scooterHeavy) windows[i].now,
+            if (explicitlyShared(zone.condition)) windows[i].now,
         ].every((open) => open);
     return [
       for (final (i, z) in zones.indexed)
@@ -1067,16 +1070,28 @@ SeatAnswer _seat(
       if (_shown(c.$1, now)) c,
   ];
   // The scooter count read on 普大共用格 (A') comes after every count of
-  // heavy bikes' own bays (重機專區, car bays) that shows, fresh or
-  // delayed: it answers only when none does, though it often has more
-  // space. It still counts as another place with space.
+  // heavy bikes' own 重機專區 that shows, fresh or delayed: it answers only
+  // when none does, though it often has more space. Beside car bays open
+  // to them, the better of the two answers ([sharedBeatsCar], user
+  // decision 2026-11-16). The one set aside still counts as another place
+  // with space.
   bool borrowed((AvailabilitySnapshot, List<SignArea>) c) =>
       sharedScooterCount(vehicle, c.$1.vehicle);
-  final usable = shown.any((c) => !borrowed(c))
+  final lent = shown.where(borrowed).firstOrNull;
+  final carCount = shown
+      .where((c) => c.$1.vehicle == AvailabilityVehicle.car)
+      .firstOrNull;
+  final usable = lent == null
+      ? shown
+      : shown.any(
+          (c) => !borrowed(c) && c.$1.vehicle != AvailabilityVehicle.car,
+        )
       ? [
           for (final c in shown)
             if (!borrowed(c)) c,
         ]
+      : carCount != null
+      ? [sharedBeatsCar(lent.$1, carCount.$1, now) ? lent : carCount]
       : shown;
   final aside = [
     for (final c in shown)

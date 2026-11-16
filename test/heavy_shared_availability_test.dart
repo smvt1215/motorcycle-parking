@@ -26,8 +26,8 @@ void main() {
   final day = DateTime.utc(2026, 11, 3, 6, 20);
 
   Map<String, dynamic> lotJson(List<Map<String, dynamic>> zones) => {
-    'id': 'binjiang',
-    'name': '濱江國中地下停車場',
+    'id': 'demo',
+    'name': '示範地下停車場',
     'lat': 25.07,
     'lng': 121.54,
     'city': '臺北市',
@@ -67,17 +67,29 @@ void main() {
       'allow': {'heavy': true},
     },
   };
-  // 濱江國中: one zone, stored with the legacy access only.
-  final binjiang = ParkingSpot.fromJson(
+  // One zone whose condition states 普大共用.
+  final onlyShared = ParkingSpot.fromJson(
     lotJson([
-      {'id': 'z1', 'name': '地下一樓', 'access': 'scooterHeavy'},
+      {'id': 'z1', 'name': '地下一樓', 'condition': sharedZone['condition']},
+    ]),
+  );
+  // 濱江國中 as imported: one 機車區 with the legacy access only, no
+  // condition (user decision 2026-11-16: not enough to lend the count).
+  final legacy = ParkingSpot.fromJson(
+    lotJson([
+      {'id': 'z1', 'name': '機車區', 'access': 'scooterHeavy'},
     ]),
   );
   final mixed = ParkingSpot.fromJson(lotJson([sharedZone, scooterZone]));
   final withHeavy = ParkingSpot.fromJson(lotJson([sharedZone, heavyZone]));
   final noZones = ParkingSpot.fromJson({
     ...lotJson(const []),
-    'parking_access': 'scooterHeavy',
+    'condition': {
+      'bay': 'motorcycle',
+      'use': 'share',
+      'share': 'scooter_heavy',
+      'charge': 'toll',
+    },
   });
 
   AvailabilitySnapshot count(
@@ -86,7 +98,7 @@ void main() {
     Duration age = const Duration(minutes: 2),
     int total = 40,
   }) => AvailabilitySnapshot(
-    spotId: 'binjiang',
+    spotId: 'demo',
     vehicle: vehicle,
     provider: '臺北市停管處',
     window: AvailabilityWindow.taipei,
@@ -118,8 +130,35 @@ void main() {
   ).firstWhere((p) => p.face == FourSignFace.seat);
 
   group('全場共用的判斷', () {
-    test('單一分區 access=scooterHeavy（濱江國中）算全場共用', () {
-      expect(motorcycleBaysAllShared(binjiang), isTrue);
+    test('單一分區的 condition 明寫普大共用才算全場共用', () {
+      expect(motorcycleBaysAllShared(onlyShared), isTrue);
+    });
+
+    test('只有舊 access=scooterHeavy（濱江國中匯入資料）不算全場共用', () {
+      expect(legacy.zones.single.condition, isNull);
+      expect(motorcycleBaysAllShared(legacy), isFalse);
+      // Beside an explicit shared zone it still may hold scooter-only bays.
+      expect(
+        motorcycleBaysAllShared(
+          ParkingSpot.fromJson(
+            lotJson([
+              sharedZone,
+              {'id': 'z2', 'name': '機車區', 'access': 'scooterHeavy'},
+            ]),
+          ),
+        ),
+        isFalse,
+      );
+      // A lot without zones: the legacy access alone is not enough either.
+      expect(
+        motorcycleBaysAllShared(
+          ParkingSpot.fromJson({
+            ...lotJson(const []),
+            'parking_access': 'scooterHeavy',
+          }),
+        ),
+        isFalse,
+      );
     });
 
     test('普大共用＋重機專區算全場共用；混有普通機車專用格不算', () {
@@ -136,8 +175,8 @@ void main() {
       );
       expect(unknownZone.zonesComplete, isFalse);
       expect(motorcycleBaysAllShared(unknownZone), isFalse);
-      expect(motorcycleBaysAllShared(binjiang), isTrue);
-      expect(binjiang.zonesComplete, isFalse);
+      expect(motorcycleBaysAllShared(onlyShared), isTrue);
+      expect(onlyShared.zonesComplete, isFalse);
     });
 
     test('沒有分區：看整點條件；只有重機專區或路邊不算', () {
@@ -161,20 +200,20 @@ void main() {
   });
 
   group('路牌', () {
-    test('濱江國中：重機模式用普通機車剩餘數，標「普大共用」', () {
-      final p = seat(binjiang, VehicleType.heavy, [scooter12, heavyNone]);
+    test('全場共用（單一分區）：重機模式用普通機車剩餘數，標「普大共用」', () {
+      final p = seat(onlyShared, VehicleType.heavy, [scooter12, heavyNone]);
       expect(p.main, '剩 12 格');
       expect(p.note, contains(sharedWithScooterLabel));
       expect(p.tone, PlateTone.line);
       expect(p.semantics, contains(sharedWithScooterLabel));
       expect(
-        sign(binjiang, VehicleType.heavy, [scooter12]).seat.shared,
+        sign(onlyShared, VehicleType.heavy, [scooter12]).seat.shared,
         isTrue,
       );
     });
 
     test('普通機車模式不變，不標共用', () {
-      final p = seat(binjiang, VehicleType.scooter, [scooter12, heavyNone]);
+      final p = seat(onlyShared, VehicleType.scooter, [scooter12, heavyNone]);
       expect(p.main, '剩 12 格');
       expect(p.note, isNot(contains(sharedWithScooterLabel)));
       expect(p.semantics, isNot(contains(sharedWithScooterSpoken)));
@@ -224,7 +263,7 @@ void main() {
     });
 
     test('機車數過期不當成重機的格數，也不放在車友回報旁', () {
-      final s = sign(binjiang, VehicleType.heavy, [
+      final s = sign(onlyShared, VehicleType.heavy, [
         count(AvailabilityVehicle.scooter, 12, age: const Duration(hours: 2)),
       ]).seat;
       expect(s.kind, SeatKind.unknown);
@@ -233,10 +272,10 @@ void main() {
   });
 
   group('詳情逐區列', () {
-    test('濱江國中（單一分區）：唯一一列寫剩餘數並標共用', () {
+    test('全場共用（單一分區）：唯一一列寫剩餘數並標共用', () {
       final counts = SpotAvailability([scooter12, heavyNone]);
       final rows = seatRows(
-        sign(binjiang, VehicleType.heavy, [scooter12, heavyNone]),
+        sign(onlyShared, VehicleType.heavy, [scooter12, heavyNone]),
         counts,
         day,
       );
@@ -576,7 +615,7 @@ void main() {
         now: night,
         availability: SpotAvailability([
           AvailabilitySnapshot(
-            spotId: 'binjiang',
+            spotId: 'demo',
             vehicle: AvailabilityVehicle.scooter,
             provider: '臺北市停管處',
             window: AvailabilityWindow.taipei,
@@ -694,6 +733,144 @@ void main() {
       );
       expect(f.count, 3);
       expect(f.caption, isNot(contains(sharedWithScooterLabel)));
+    });
+  });
+  group('濱江國中舊資料（只有 access=scooterHeavy）', () {
+    test('路牌空位未知；詳情列空位未知並附普通機車次要行；膠囊與篩選不借用', () {
+      final list = [scooter12, heavyNone];
+      final counts = SpotAvailability(list);
+      final p = seat(legacy, VehicleType.heavy, list);
+      expect(p.main, '空位未知');
+      expect(p.note, isNot(contains(sharedWithScooterLabel)));
+      final row = seatRows(
+        sign(legacy, VehicleType.heavy, list),
+        counts,
+        day,
+      ).single;
+      expect(row.official, '空位未知');
+      expect(row.counted, isFalse);
+      expect(row.officialNote, contains('普通機車區剩 12 格'));
+      expect(row.officialNote, contains(notForHeavyNote));
+      // 停哪裡 still reads the legacy access as 普大共用格.
+      expect(row.sub, contains('普大共用格'));
+      final decision = decideParking(
+        legacy,
+        VehicleType.heavy,
+        const [],
+        now: day,
+      );
+      expect(
+        markerCapsules(legacy, counts, VehicleType.heavy, decision, day),
+        isEmpty,
+      );
+      expect(
+        availabilityExclusion(
+          AvailabilityFilter.available,
+          legacy,
+          counts,
+          VehicleType.heavy,
+          EligibilityStatus.allowed,
+          day,
+          decision: decision,
+        ),
+        AvailabilityExclusion.noData,
+      );
+    });
+  });
+
+  group('汽車格與普大共用格都有數字（2026-11-16 使用者決定）', () {
+    final withCar = ParkingSpot.fromJson(
+      lotJson([
+        sharedZone,
+        {
+          'id': 'c1',
+          'name': 'B4 汽車區',
+          'condition': {
+            'bay': 'car',
+            'use': 'share',
+            'share': 'car_motorcycle',
+            'allow': {'heavy': true},
+          },
+        },
+      ]),
+    );
+    AvailabilityCapsule primary(List<AvailabilitySnapshot> list) {
+      final decision = decideParking(
+        withCar,
+        VehicleType.heavy,
+        const [],
+        now: day,
+      );
+      return primaryCapsules(
+        withCar,
+        VehicleType.heavy,
+        decision,
+        markerCapsules(
+          withCar,
+          SpotAvailability(list),
+          VehicleType.heavy,
+          decision,
+          day,
+        ),
+      ).single;
+    }
+
+    AvailabilitySnapshot car(int available, {int minutes = 2}) => count(
+      AvailabilityVehicle.car,
+      available,
+      total: 100,
+      age: Duration(minutes: minutes),
+    );
+    AvailabilitySnapshot shared(int available, {int minutes = 2}) => count(
+      AvailabilityVehicle.scooter,
+      available,
+      age: Duration(minutes: minutes),
+    );
+
+    test('汽車格新、共用延遲：汽車格當主答案，共用不算另一區有位', () {
+      final list = [car(3), shared(12, minutes: 15), heavyNone];
+      final p = primary(list);
+      expect((p.text, p.style), ('剩 3', CapsuleStyle.car));
+      final s = sign(withCar, VehicleType.heavy, list).seat;
+      expect((s.kind, s.available, s.shared), (SeatKind.live, 3, false));
+      expect(s.more, 0);
+      // The details still list the shared zone with its own row.
+      final rows = seatRows(
+        sign(withCar, VehicleType.heavy, list),
+        SpotAvailability(list),
+        day,
+      );
+      expect(rows.firstWhere((r) => r.area.id == 'b1').official, '剩 12 格');
+    });
+
+    test('一樣新、空位數不同：空位多的當主答案，另一個算另一區有位', () {
+      var list = [car(3), shared(12), heavyNone];
+      var p = primary(list);
+      expect((p.text, p.style), ('剩 12', CapsuleStyle.live));
+      var s = sign(withCar, VehicleType.heavy, list).seat;
+      expect((s.available, s.shared, s.more), (12, true, 1));
+      list = [car(12), shared(3), heavyNone];
+      p = primary(list);
+      expect((p.text, p.style), ('剩 12', CapsuleStyle.car));
+      s = sign(withCar, VehicleType.heavy, list).seat;
+      expect((s.available, s.shared, s.more), (12, false, 1));
+    });
+
+    test('一樣新、空位數相同：較新的當主答案，時間也相同時汽車格優先', () {
+      var list = [car(5), shared(5), heavyNone];
+      expect(primary(list).style, CapsuleStyle.car);
+      expect(sign(withCar, VehicleType.heavy, list).seat.shared, isFalse);
+      list = [car(5, minutes: 4), shared(5, minutes: 1), heavyNone];
+      expect(primary(list).style, CapsuleStyle.live);
+      expect(sign(withCar, VehicleType.heavy, list).seat.shared, isTrue);
+    });
+
+    test('兩者都延遲：空位多的當主答案', () {
+      final list = [car(3, minutes: 15), shared(12, minutes: 15), heavyNone];
+      final p = primary(list);
+      expect((p.text, p.style), ('剩 12', CapsuleStyle.delayed));
+      final s = sign(withCar, VehicleType.heavy, list).seat;
+      expect((s.kind, s.available, s.shared), (SeatKind.delayed, 12, true));
     });
   });
 }

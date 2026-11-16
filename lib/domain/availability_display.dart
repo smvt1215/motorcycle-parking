@@ -1,7 +1,6 @@
 import '../models/availability.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
-import '../models/zone_entries.dart';
 import 'eligibility.dart';
 import 'parking_decision.dart';
 import 'rider_meter_display.dart';
@@ -79,25 +78,30 @@ const notForHeavyNote = '不代表重機可用格數';
 /// data alone, the same way for the four signs, the details, the map's
 /// pills and the 「目前有位」 filter:
 /// - a lot only (street spots have no official count);
+/// - 普大共用 only where a condition states it ([explicitlyShared]): a
+///   legacy `access: scooterHeavy` alone is the importer's guess for a
+///   機車區, often one whose heavy bikes park on 重機專用格, so it may hold
+///   scooter-only bays (user decision 2026-11-16, #489). Elsewhere (停哪裡,
+///   the decision) it still reads as 普大共用格;
 /// - zones that say something (a condition or a legacy access; as
-///   [decideParking] reads them): at least one zone is 普大共用 and every
-///   other zone has no motorcycle bay: heavy-only or car bays, or no bay
-///   with scooters excluded. Any zone that says nothing, motorcycle bays of
-///   another kind (一般、身障、充電) or no bay without excluding scooters
-///   may hold scooter-only bays the count includes: false. Heavy-only
-///   zones never matter. [ParkingSpot.zonesComplete] is not required;
-/// - no zone says anything: the lot's own condition (or the condition its
-///   access stands for) is 普大共用.
+///   [decideParking] reads them): at least one zone is explicitly 普大共用
+///   and every other zone has no motorcycle bay: heavy-only or car bays,
+///   or no bay with scooters excluded. Any zone that says nothing, a
+///   legacy 普大共用 zone, motorcycle bays of another kind (一般、身障、
+///   充電) or no bay without excluding scooters may hold scooter-only bays
+///   the count includes: false. Heavy-only zones never matter.
+///   [ParkingSpot.zonesComplete] is not required;
+/// - no zone says anything: the lot's own condition is explicitly 普大共用.
 bool motorcycleBaysAllShared(ParkingSpot spot) {
   if (!spot.isFacility) return false;
   final zones = [
-    for (final z in spot.zones) z.condition ?? zoneConditionOf(z.access),
+    for (final z in spot.zones) (z.condition ?? zoneConditionOf(z.access), z),
   ];
-  if (zones.any((c) => c != null)) {
+  if (zones.any((c) => c.$1 != null)) {
     var shared = false;
-    for (final c in zones) {
+    for (final (c, z) in zones) {
       if (c == null) return false;
-      if (bayKindOf(c) == BayKind.scooterHeavy) {
+      if (explicitlyShared(z.condition)) {
         shared = true;
       } else if (c.bay == Bay.motorcycle ||
           (c.bay == null && c.allow?.scooter != false)) {
@@ -106,9 +110,14 @@ bool motorcycleBaysAllShared(ParkingSpot spot) {
     }
     return shared;
   }
-  return bayKindOf(spot.condition ?? zoneConditionOf(spot.access)) ==
-      BayKind.scooterHeavy;
+  return explicitlyShared(spot.condition);
 }
+
+/// Whether [condition], as stored (never one a legacy access stands for),
+/// states 普大共用格: the only bays whose scooter count heavy bikes may read
+/// (#489).
+bool explicitlyShared(ParkingCondition? condition) =>
+    condition?.share == ShareKind.scooterHeavy;
 
 /// Whether [count], read for [vehicle], is the scooter count standing for
 /// 普大共用格 (A'): heavy bikes reading it are marked
@@ -129,10 +138,10 @@ bool _countShown(AvailabilitySnapshot s, DateTime now) =>
 /// - only while [decision] opens every 普大共用 place to heavy bikes now
 ///   (a shared zone whose notice has lapsed, or closed to them while
 ///   scooters park, keeps the count from them);
-/// - after the counts of heavy bikes' own bays: a heavy count that shows,
-///   or a car count that shows where [decision] opens car bays to them
-///   now ([heavyCarOpen], read by their windows as the four signs read
-///   them; the pills then show the car pill instead).
+/// - after a heavy count that shows; beside a car count that shows where
+///   [decision] opens car bays to them now ([heavyCarOpen], read by their
+///   windows as the four signs read them), only where it is the better
+///   ([sharedBeatsCar]); else the pills show the car pill instead.
 /// Without [decision] the scooter count is never read.
 AvailabilitySnapshot? lotCount(
   ParkingSpot spot,
@@ -153,19 +162,43 @@ AvailabilitySnapshot? lotCount(
           own.status(now) == AvailabilityStatus.suspended)) {
     return own;
   }
+  final scooter = availability.of(AvailabilityVehicle.scooter);
+  if (scooter == null ||
+      !(_countShown(scooter, now) ||
+          scooter.status(now) == AvailabilityStatus.suspended)) {
+    return own;
+  }
+  // Car bays open to heavy bikes now with a count that shows: the shared
+  // count stands only where it is the better of the two ([sharedBeatsCar]);
+  // otherwise the car pill answers.
   final car = availability.of(AvailabilityVehicle.car);
   if (car != null &&
       _countShown(car, now) &&
-      _carOpenNow(spot, decision, now)) {
+      _carOpenNow(spot, decision, now) &&
+      !(_countShown(scooter, now) && sharedBeatsCar(scooter, car, now))) {
     return own;
   }
-  final scooter = availability.of(AvailabilityVehicle.scooter);
-  if (scooter != null &&
-      (_countShown(scooter, now) ||
-          scooter.status(now) == AvailabilityStatus.suspended)) {
-    return scooter;
-  }
-  return own;
+  return scooter;
+}
+
+/// Whether the shared scooter count [shared] answers before the car-bay
+/// count [car] where heavy bikes may read both, both showing (user
+/// decision 2026-11-16, #489: 空位多、資料新的當主答案): fresh before
+/// delayed; then more space; then the newer; at a tie the car bays, heavy
+/// bikes' own by law. The other stays as another place with space (the
+/// four signs) or beside it (the details' rows, the full set of pills).
+bool sharedBeatsCar(
+  AvailabilitySnapshot shared,
+  AvailabilitySnapshot car,
+  DateTime now,
+) {
+  final sharedFresh = shared.status(now) == AvailabilityStatus.fresh;
+  final carFresh = car.status(now) == AvailabilityStatus.fresh;
+  if (sharedFresh != carFresh) return sharedFresh;
+  final byFree = shared.available!.compareTo(car.available!);
+  if (byFree != 0) return byFree > 0;
+  final a = shared.sourceUpdatedAt, b = car.sourceUpdatedAt;
+  return a != null && b != null && a.isAfter(b);
 }
 
 /// Whether [decision] opens the 普大共用 places of [spot] to heavy bikes
@@ -191,7 +224,7 @@ bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
     for (var i = 0; i < zones.length; i++) {
       final c =
           spot.zones[i].condition ?? zoneConditionOf(spot.zones[i].access);
-      if (bayKindOf(c) != BayKind.scooterHeavy) continue;
+      if (!explicitlyShared(spot.zones[i].condition)) continue;
       if (!openNow(zones[i].status, c)) return false;
       any = true;
     }
