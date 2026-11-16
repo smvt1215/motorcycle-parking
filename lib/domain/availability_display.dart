@@ -131,7 +131,8 @@ bool _countShown(AvailabilitySnapshot s, DateTime now) =>
 ///   scooters park, keeps the count from them);
 /// - after the counts of heavy bikes' own bays: a heavy count that shows,
 ///   or a car count that shows where [decision] opens car bays to them
-///   ([heavyCarOpen]; the pills then show the car pill instead).
+///   now ([heavyCarOpen], read by their windows as the four signs read
+///   them; the pills then show the car pill instead).
 /// Without [decision] the scooter count is never read.
 AvailabilitySnapshot? lotCount(
   ParkingSpot spot,
@@ -153,7 +154,9 @@ AvailabilitySnapshot? lotCount(
     return own;
   }
   final car = availability.of(AvailabilityVehicle.car);
-  if (car != null && _countShown(car, now) && heavyCarOpen(spot, decision)) {
+  if (car != null &&
+      _countShown(car, now) &&
+      _carOpenNow(spot, decision, now)) {
     return own;
   }
   final scooter = availability.of(AvailabilityVehicle.scooter);
@@ -198,6 +201,33 @@ bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
   // park (待確認), as the four signs read the lot.
   if (scheduleSilentFor(spot.condition, VehicleType.heavy)) return false;
   return openNow(decision.status, spot.condition);
+}
+
+/// Whether [decision] opens car bays of [spot] to heavy bikes now: as
+/// [heavyCarOpen] reads them, and for zones only while their window is
+/// open (a zone opening later is conditional, not open now).
+bool _carOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
+  if (!heavyCarOpen(spot, decision)) return false;
+  final zones = decision.zones;
+  if (zones.length == spot.zones.length && zones.any((z) => z.hasData)) {
+    for (var i = 0; i < zones.length; i++) {
+      final c =
+          spot.zones[i].condition ?? zoneConditionOf(spot.zones[i].access);
+      if (zones[i].open &&
+          c?.bay == Bay.car &&
+          openWindow(
+            zones[i].status,
+            c,
+            VehicleType.heavy,
+            now,
+            basis: decision.basis,
+          ).now) {
+        return true;
+      }
+    }
+    return false;
+  }
+  return true;
 }
 
 /// The scooter count as a secondary line beside a heavy-bike 空位未知:

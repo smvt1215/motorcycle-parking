@@ -625,6 +625,64 @@ void main() {
       );
     });
 
+    test('汽車區此時沒開放重機：汽車數字不擋住借用（Codex P2 第 5 輪）', () {
+      final laterCar = ParkingSpot.fromJson(
+        lotJson([
+          sharedZone,
+          {
+            'id': 'c1',
+            'name': 'B4 汽車區',
+            'condition': {
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'allow': {'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '20:00',
+                  'to': '23:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            },
+          },
+        ]),
+      );
+      final decision = judged(laterCar, VehicleType.heavy);
+      final counts = SpotAvailability([
+        scooter12,
+        heavyNone,
+        count(AvailabilityVehicle.car, 0, total: 100),
+      ]);
+      final own = markerCapsules(
+        laterCar,
+        counts,
+        VehicleType.heavy,
+        decision,
+        day,
+      ).where((c) => c.style != CapsuleStyle.car);
+      expect(own.single.text, '剩 12');
+      expect(
+        availabilityExclusion(
+          AvailabilityFilter.available,
+          laterCar,
+          counts,
+          VehicleType.heavy,
+          EligibilityStatus.allowed,
+          day,
+          decision: decision,
+        ),
+        isNull,
+      );
+      final seat = sign(laterCar, VehicleType.heavy, [
+        scooter12,
+        heavyNone,
+        count(AvailabilityVehicle.car, 0, total: 100),
+      ]).seat;
+      expect((seat.available, seat.shared), (12, true));
+    });
+
     test('重機自己的有效數字優先', () {
       final heavy = count(AvailabilityVehicle.heavy, 3, total: 10);
       final f = availabilityFact(
