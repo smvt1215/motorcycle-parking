@@ -196,25 +196,41 @@ class SidePanelHost extends InheritedWidget {
 }
 
 /// Whether a sheet opened from [context] belongs in the panel's place: from
-/// inside a sheet already there, or from the shell page. A page of its own
-/// (刪除帳號, 已隱藏的車友, the notice after a deletion request) or a sheet
-/// across the window (帳號與設定) has no panel column to keep to, so what
-/// opens from it stays the sheet a phone shows.
+/// inside a sheet already there (帳號與設定 and 已隱藏的車友 among them), or
+/// from the shell page. A page of its own (刪除帳號, the notice after a
+/// deletion request) has no panel column to keep to, so what opens from it
+/// stays the sheet a phone shows.
 bool sidePanelHost(BuildContext context) =>
     SidePanelScope.isIn(context) ||
     context.getInheritedWidgetOfExactType<SidePanelHost>() != null;
+
+/// Whether a spot's details built at [context] are the tablet panel's
+/// ([SidePanelRoute.detail]) rather than the phone's sheet.
+bool isSidePanelDetail(BuildContext context) =>
+    SidePanelScope.isIn(context) && isTabletLayout(context);
 
 /// A sheet shown in the tablet panel's place (A7c ⑦⑧, P16b ④⑤): the scrim
 /// over the whole window, the panel rising from the bottom of its column.
 /// Tapping the scrim or going back closes it.
 class SidePanelRoute<T> extends PopupRoute<T> {
-  SidePanelRoute({required this.builder, this.nested = false, super.settings});
+  SidePanelRoute({
+    required this.builder,
+    this.nested = false,
+    this.detail = false,
+    super.settings,
+  });
   final WidgetBuilder builder;
 
   /// Opened from a sheet already in the panel's place (a form's own sheet
   /// over its list, S2 over S1): it covers that panel exactly, and the
   /// window keeps the one scrim instead of darkening twice.
   final bool nested;
+
+  /// A spot's details opened from 收藏 or 我的貢獻 (Q190L2-1): the builder
+  /// draws its own panel, grabber and foot ([isSidePanelDetail] tells it
+  /// which), so the route only places it. On a window too narrow for the
+  /// tablet layout it gets the whole window, as the phone's details sheet.
+  final bool detail;
 
   /// The boards' scrim, rgba(22,49,58,.38).
   @override
@@ -245,6 +261,7 @@ class SidePanelRoute<T> extends PopupRoute<T> {
       // knows where it is.
       child: SidePanelScope(child: Builder(builder: builder)),
     );
+    if (detail) return _detailPage(context, content);
     // The window's own insets hold inside the panel: the keyboard and the
     // home indicator.
     Widget surface(Widget child) => Semantics(
@@ -295,6 +312,39 @@ class SidePanelRoute<T> extends PopupRoute<T> {
                 // home indicator.
                 Expanded(child: SafeArea(top: false, child: content)),
               ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// [detail]'s page: the details in the panel column, or across the
+  /// window inside its safe area, as on a phone, once it is too narrow.
+  /// One shape for both, so the route's own tree stays put when the window
+  /// crosses the tablet width; the details start afresh (see `showSpot`).
+  Widget _detailPage(BuildContext context, Widget content) {
+    final tablet = isTabletLayout(context);
+    final padding = MediaQuery.paddingOf(context);
+    final left = tablet ? sidePanelWindowLeft(context) : padding.left;
+    return Stack(
+      children: [
+        Positioned(
+          left: left,
+          right: tablet
+              ? MediaQuery.sizeOf(context).width - left - sidePanelWidth
+              : padding.right,
+          top: tablet ? sidePanelTop(context) : padding.top,
+          bottom: 0,
+          child: Semantics(
+            scopesRoute: true,
+            explicitChildNodes: true,
+            child: MediaQuery.removePadding(
+              context: context,
+              removeTop: true,
+              removeLeft: true,
+              removeRight: true,
+              child: content,
             ),
           ),
         ),

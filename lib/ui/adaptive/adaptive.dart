@@ -599,10 +599,15 @@ Future<T?> showAdaptiveSheet<T>(
   Widget content(BuildContext ctx) =>
       detail ? builder(ctx) : SheetKeyboardDismissal(child: builder(ctx));
   // On a tablet a sheet that asks for it takes the side panel's place
-  // (A7c ⑦⑧, P16b ④⑤) instead of rising across the whole window.
-  if (sidePanel && !detail && isTabletLayout(context)) {
+  // (A7c ⑦⑧, P16b ④⑤) instead of rising across the whole window; so do
+  // details (Q190L2-1), which draw the panel themselves.
+  if (sidePanel && isTabletLayout(context)) {
     return Navigator.of(context, rootNavigator: true).push<T>(
-      SidePanelRoute<T>(builder: content, nested: SidePanelScope.isIn(context)),
+      SidePanelRoute<T>(
+        builder: content,
+        nested: SidePanelScope.isIn(context),
+        detail: detail,
+      ),
     );
   }
   if (isCupertino) {
