@@ -63,8 +63,13 @@ bool _carArea(ParkingZone zone) =>
 // [notForHeavyNote]).
 
 /// Beside a count heavy bikes read from the scooter count: those bays are
-/// 普大共用, so scooters park there too.
-const sharedWithScooterLabel = '與普通機車共用';
+/// 普大共用, so scooters park there too. The same word as 停哪裡's
+/// 「普大共用格」 (user decision 2026-11-16, #489).
+const sharedWithScooterLabel = '普大共用';
+
+/// [sharedWithScooterLabel] for screen readers, which may not know the
+/// short word.
+const sharedWithScooterSpoken = '普大共用，與普通機車共用格位';
 
 /// After the scooter count shown beside a heavy-bike 空位未知.
 const notForHeavyNote = '不代表重機可用格數';
@@ -325,7 +330,7 @@ List<AvailabilityCapsule> _officialCapsules(
   // does. (Pending PM: whether the pill and the filter read it at all.)
   final own = lotCount(spot, availability, vehicle, decision, now);
   final shared = sharedScooterCount(vehicle, own?.vehicle)
-      ? '（$sharedWithScooterLabel）'
+      ? '（$sharedWithScooterSpoken）'
       : '';
   final capsules = <AvailabilityCapsule>[
     if (own != null)
@@ -427,6 +432,7 @@ class AvailabilityFact {
     this.count,
     this.capacity,
     this.notes = const [],
+    this.spokenCaption,
   });
 
   /// 「有沒有位」, the four signs' name for it (A14).
@@ -445,12 +451,16 @@ class AvailabilityFact {
   final String caption;
   final List<AvailabilityNote> notes;
 
+  /// [caption] for screen readers where it differs (the shared count's
+  /// 「普大共用」 said in full); null when the caption reads as it is.
+  final String? spokenCaption;
+
   /// The whole fact as one sentence for screen readers.
   String get semantics => [
     title,
     if (count != null) '$headline $count 格' else headline,
     if (capacity != null) capacity!.replaceFirst('／ ', ''),
-    caption,
+    spokenCaption ?? caption,
     for (final note in notes) '${note.text}，${note.caption}',
   ].join('，');
 }
@@ -493,9 +503,12 @@ AvailabilityFact availabilityFact(
       : shared
       ? '／ 共 ${own.total} 格'
       : '／ 共 ${own.total} 格（${vehicle.label}）';
-  String withShared(String caption) => shared
-      ? [caption, sharedWithScooterLabel].where((t) => t.isNotEmpty).join(' ・ ')
+  String withShared(String caption, [String label = sharedWithScooterLabel]) =>
+      shared
+      ? [caption, label].where((t) => t.isNotEmpty).join(' ・ ')
       : caption;
+  String? spoken(String caption) =>
+      shared ? withShared(caption, sharedWithScooterSpoken) : null;
   final staticTotal =
       own?.capacity ??
       (vehicle == VehicleType.scooter && (spot.scooterTotal ?? 0) > 0
@@ -514,20 +527,22 @@ AvailabilityFact availabilityFact(
         headline: full ? '剩餘，已滿' : '剩餘',
         capacity: capacity(own),
         caption: withShared(source),
+        spokenCaption: spoken(source),
         notes: notes,
       );
     case AvailabilityStatus.delayed:
+      final delayedSource =
+          '最後更新 ${availabilityClock(own!.sourceUpdatedAt!)}　'
+          '${own.provider}';
       return AvailabilityFact(
         title: title,
-        count: own!.available,
+        count: own.available,
         headline:
             '剩餘${own.available == 0 ? '，已滿' : ''}，'
             '更新延遲 ${own.ageMinutes(now)} 分鐘',
         capacity: capacity(own),
-        caption: withShared(
-          '最後更新 ${availabilityClock(own.sourceUpdatedAt!)}　'
-          '${own.provider}',
-        ),
+        caption: withShared(delayedSource),
+        spokenCaption: spoken(delayedSource),
         notes: notes,
       );
     case AvailabilityStatus.stale:

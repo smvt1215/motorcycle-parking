@@ -292,7 +292,7 @@ class SeatAnswer {
 
   /// The count is the scooter count heavy bikes read on 普大共用格 (A',
   /// [motorcycleBaysAllShared]): scooters park there too, so it is shown
-  /// marked 「與普通機車共用」.
+  /// marked 「普大共用」.
   final bool shared;
 
   /// The places the number is about (a shared count names several).

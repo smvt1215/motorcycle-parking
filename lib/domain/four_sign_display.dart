@@ -11,7 +11,7 @@ import '../models/holiday_calendar.dart' show taipeiDateMinute;
 import '../models/parking.dart';
 import '../models/space_kind.dart';
 import 'availability_display.dart'
-    show availabilityClock, sharedWithScooterLabel;
+    show availabilityClock, sharedWithScooterLabel, sharedWithScooterSpoken;
 import 'eligibility.dart';
 import 'four_sign.dart';
 import 'parking_decision.dart';
@@ -421,7 +421,7 @@ SignPlate _seatPlate(FourSign s, DateTime now) {
         tag: more,
         semantics: spoken([
           '$named$main',
-          if (seat.shared) sharedWithScooterLabel,
+          if (seat.shared) sharedWithScooterSpoken,
           delayed ? '官方資料更新延遲' : '官方即時',
           if (ago.isNotEmpty) '$ago更新',
         ]),

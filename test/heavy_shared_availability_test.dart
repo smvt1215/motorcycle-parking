@@ -161,7 +161,7 @@ void main() {
   });
 
   group('路牌', () {
-    test('濱江國中：重機模式用普通機車剩餘數，標「與普通機車共用」', () {
+    test('濱江國中：重機模式用普通機車剩餘數，標「普大共用」', () {
       final p = seat(binjiang, VehicleType.heavy, [scooter12, heavyNone]);
       expect(p.main, '剩 12 格');
       expect(p.note, contains(sharedWithScooterLabel));
@@ -177,7 +177,7 @@ void main() {
       final p = seat(binjiang, VehicleType.scooter, [scooter12, heavyNone]);
       expect(p.main, '剩 12 格');
       expect(p.note, isNot(contains(sharedWithScooterLabel)));
-      expect(p.semantics, isNot(contains(sharedWithScooterLabel)));
+      expect(p.semantics, isNot(contains(sharedWithScooterSpoken)));
     });
 
     test('沒有分區、整點普大共用：同樣借用並標示', () {
@@ -247,7 +247,7 @@ void main() {
       expect(rows.single.officialNote, isNot(contains(notForHeavyNote)));
     });
 
-    test('全場共用：共用區列寫剩餘數並標「與普通機車共用」', () {
+    test('全場共用：共用區列寫剩餘數並標「普大共用」', () {
       final counts = SpotAvailability([scooter12, heavyNone]);
       final rows = seatRows(
         sign(withHeavy, VehicleType.heavy, [scooter12, heavyNone]),
@@ -307,6 +307,7 @@ void main() {
       expect(f.count, 12);
       expect(f.capacity, '／ 共 40 格');
       expect(f.caption, contains(sharedWithScooterLabel));
+      expect(f.semantics, contains(sharedWithScooterSpoken));
       expect(f.notes.where((n) => n.text.contains('普通機車區')), isEmpty);
     });
 
@@ -320,7 +321,7 @@ void main() {
         day,
       ).single;
       expect(capsule.text, '剩 12');
-      expect(capsule.semantics, contains(sharedWithScooterLabel));
+      expect(capsule.semantics, contains(sharedWithScooterSpoken));
       expect(
         availabilityExclusion(
           AvailabilityFilter.available,
