@@ -19,7 +19,14 @@ import '../models/holiday_calendar.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
 import '../models/zone_entries.dart';
-import 'availability_display.dart' show availabilityVehicle, heavyCarOpen;
+import 'availability_display.dart'
+    show
+        availabilityVehicle,
+        explicitlyShared,
+        heavyCarOpen,
+        motorcycleBaysAllShared,
+        sharedBeatsCar,
+        sharedScooterCount;
 import 'eligibility.dart';
 import 'parking_decision.dart';
 import 'segment_decision.dart';
@@ -281,8 +288,14 @@ class SeatAnswer {
     this.besideArea,
     this.disagrees = false,
     this.lapsed,
+    this.shared = false,
   });
   final SeatKind kind;
+
+  /// The count is the scooter count heavy bikes read on 普大共用格 (A',
+  /// [motorcycleBaysAllShared]): scooters park there too, so it is shown
+  /// marked 「普大共用」.
+  final bool shared;
 
   /// The places the number is about (a shared count names several).
   final List<SignArea> areas;
@@ -666,16 +679,32 @@ BayKind? _zoneBay(ParkingZone z) => bayKindOf(_zoneCondition(z));
 /// sends one count per scooter, heavy bike and car for the whole lot,
 /// decision 2026-10-29), read from the zone's bay: heavy bays the heavy
 /// count, car bays the car count (heavy bikes only, as [heavyCarOpen]
-/// reads them), motorcycle bays the scooter count for scooters. A heavy
-/// bike on motorcycle bays has no count of its own: the scooter count
-/// never stands for it. A zone whose bay is unconfirmed has none.
-AvailabilityVehicle? _countClass(ParkingZone z, VehicleType vehicle) =>
-    switch ((vehicle, _zoneCondition(z)?.bay)) {
-      (VehicleType.heavy, Bay.heavy) => AvailabilityVehicle.heavy,
-      (VehicleType.heavy, Bay.car) => AvailabilityVehicle.car,
-      (VehicleType.scooter, Bay.motorcycle) => AvailabilityVehicle.scooter,
-      _ => null,
-    };
+/// reads them), motorcycle bays the scooter count for scooters. A zone
+/// whose bay is unconfirmed has none.
+///
+/// A heavy bike on motorcycle bays has no count of its own (#222): the
+/// scooter count never stands for heavy-only bays, car bays, or motorcycle
+/// bays heavy bikes may not use. The one exception (A', 2026-11-15): on a
+/// zone whose condition states 普大共用 ([explicitlyShared]; never a
+/// legacy access alone) of a lot whose motorcycle bays are all 普大共用
+/// ([allShared], [motorcycleBaysAllShared]), the scooter count is those
+/// shared bays' count, read as such ([sharedScooterCount]), while every
+/// shared zone is open to heavy bikes now (the count covers them all). A
+/// lot that also has scooter-only motorcycle bays keeps none on its shared
+/// zones.
+AvailabilityVehicle? _countClass(
+  ParkingZone z,
+  VehicleType vehicle, {
+  required bool allShared,
+}) => switch ((vehicle, _zoneCondition(z)?.bay)) {
+  (VehicleType.heavy, Bay.heavy) => AvailabilityVehicle.heavy,
+  (VehicleType.heavy, Bay.car) => AvailabilityVehicle.car,
+  (VehicleType.heavy, Bay.motorcycle)
+      when allShared && explicitlyShared(z.condition) =>
+    AvailabilityVehicle.scooter,
+  (VehicleType.scooter, Bay.motorcycle) => AvailabilityVehicle.scooter,
+  _ => null,
+};
 
 List<SignArea> _lotAreas(
   ParkingSpot spot,
@@ -693,30 +722,45 @@ List<SignArea> _lotAreas(
       whole.status == EligibilityStatus.allowed ||
       whole.status == EligibilityStatus.conditional;
   if (zones.length == spot.zones.length && zones.any((z) => z.hasData)) {
+    final statuses = [
+      for (final z in zones)
+        lotOpen || z.status == EligibilityStatus.notAllowed
+            ? z.status
+            : EligibilityStatus.unverified,
+    ];
+    final windows = [
+      for (final (i, zone) in spot.zones.indexed)
+        openWindow(
+          statuses[i],
+          _zoneCondition(zone),
+          vehicle,
+          now,
+          calendar: calendar,
+          basis: whole.basis,
+        ),
+    ];
+    // The scooter count covers every shared zone: heavy bikes read it only
+    // while each of them is open to them now (A').
+    final allShared =
+        motorcycleBaysAllShared(spot) &&
+        [
+          for (final (i, zone) in spot.zones.indexed)
+            if (explicitlyShared(zone.condition)) windows[i].now,
+        ].every((open) => open);
     return [
       for (final (i, z) in zones.indexed)
         () {
-          final status = lotOpen || z.status == EligibilityStatus.notAllowed
-              ? z.status
-              : EligibilityStatus.unverified;
           final zone = spot.zones[i];
           return SignArea(
             id: zone.id,
             name: z.name.trim(),
-            status: status,
+            status: statuses[i],
             restriction: lotOpen ? z.restriction : null,
             bayKind: _zoneBay(zone),
-            countClass: _countClass(zone, vehicle),
+            countClass: _countClass(zone, vehicle, allShared: allShared),
             zone: zone,
             condition: _zoneCondition(zone),
-            window: openWindow(
-              status,
-              _zoneCondition(zone),
-              vehicle,
-              now,
-              calendar: calendar,
-              basis: whole.basis,
-            ),
+            window: windows[i],
           );
         }(),
     ];
@@ -986,6 +1030,14 @@ SeatAnswer _seat(
       // The whole lot: its own class's count, and for heavy bikes the car
       // bays the lot opens to them.
       groups[availabilityVehicle(vehicle)] = const [];
+      // A lot of 普大共用格 alone (A'): heavy bikes may read the scooter
+      // count, after their own (below), only while the lot is open to them
+      // now (places may be the lot open later, when nothing is open now).
+      if (vehicle == VehicleType.heavy &&
+          motorcycleBaysAllShared(spot) &&
+          places.every((a) => a.window.now)) {
+        groups[AvailabilityVehicle.scooter] = const [];
+      }
     } else {
       for (final a in places) {
         if (a.countClass case final cls?) {
@@ -995,7 +1047,9 @@ SeatAnswer _seat(
       // No zone open now that a count describes: the space stays unknown.
       // The lot's count would describe the zones left out (a heavy-bike
       // count while only a shared motorcycle zone is open); only a lot
-      // with no zone data at all reads it, above.
+      // with no zone data at all reads it, above. A shared zone reads the
+      // scooter count only where every motorcycle bay is shared (A',
+      // [_countClass]).
     }
     if (vehicle == VehicleType.heavy &&
         !groups.containsKey(AvailabilityVehicle.car) &&
@@ -1011,9 +1065,37 @@ SeatAnswer _seat(
   if (counts.any((c) => c.$1.status(now) == AvailabilityStatus.suspended)) {
     return const SeatAnswer(kind: SeatKind.suspended);
   }
-  final usable = [
+  final shown = [
     for (final c in counts)
       if (_shown(c.$1, now)) c,
+  ];
+  // The scooter count read on 普大共用格 (A') comes after every count of
+  // heavy bikes' own 重機專區 that shows, fresh or delayed: it answers only
+  // when none does, though it often has more space. Beside car bays open
+  // to them, the better of the two answers ([sharedBeatsCar], user
+  // decision 2026-11-16). The one set aside still counts as another place
+  // with space.
+  bool borrowed((AvailabilitySnapshot, List<SignArea>) c) =>
+      sharedScooterCount(vehicle, c.$1.vehicle);
+  final lent = shown.where(borrowed).firstOrNull;
+  final carCount = shown
+      .where((c) => c.$1.vehicle == AvailabilityVehicle.car)
+      .firstOrNull;
+  final usable = lent == null
+      ? shown
+      : shown.any(
+          (c) => !borrowed(c) && c.$1.vehicle != AvailabilityVehicle.car,
+        )
+      ? [
+          for (final c in shown)
+            if (!borrowed(c)) c,
+        ]
+      : carCount != null
+      ? [sharedBeatsCar(lent.$1, carCount.$1, now) ? lent : carCount]
+      : shown;
+  final aside = [
+    for (final c in shown)
+      if (!usable.contains(c)) c,
   ];
   if (usable.isNotEmpty) {
     bool isFresh(int i) => usable[i].$1.status(now) == AvailabilityStatus.fresh;
@@ -1036,10 +1118,15 @@ SeatAnswer _seat(
     final best = usable[bestAt];
     // Only counts in the same pool say another place has space: with fresh
     // ones, a delayed count never does.
+    int placeCount((AvailabilitySnapshot, List<SignArea>) c) =>
+        c.$2.isEmpty ? 1 : c.$2.length;
     final more = [
       for (final i in pool)
-        if (i != bestAt && usable[i].$1.available! > 0)
-          usable[i].$2.isEmpty ? 1 : usable[i].$2.length,
+        if (i != bestAt && usable[i].$1.available! > 0) placeCount(usable[i]),
+      for (final c in aside)
+        if (c.$1.available! > 0 &&
+            (!anyFresh || c.$1.status(now) == AvailabilityStatus.fresh))
+          placeCount(c),
     ].fold<int>(0, (a, b) => a + b);
     // The report beside the count: of the place the count is about when
     // there is one, else the best (A11 cards 1, 2, 4).
@@ -1062,6 +1149,7 @@ SeatAnswer _seat(
       available: best.$1.available,
       total: best.$1.capacity,
       at: best.$1.sourceUpdatedAt,
+      shared: borrowed(best),
       more: more,
       beside: beside?.$2,
       besideArea: beside?.$1,
@@ -1076,7 +1164,10 @@ SeatAnswer _seat(
     final (place, report) = ranked.first;
     final lapsed = [
       for (final c in counts)
+        // The scooter count past its window is not set beside a heavy
+        // rider's report (A'); only a count of their own bays is.
         if (c.$1.status(now) == AvailabilityStatus.stale &&
+            !borrowed(c) &&
             c.$1.available != null &&
             c.$1.sourceUpdatedAt != null)
           c.$1,
@@ -1092,9 +1183,11 @@ SeatAnswer _seat(
   }
   // Only how many bays: the places open now added up (A6 card 2).
   if (spot.isFacility) {
+    // Totals of heavy bikes' own bays only: the shared bays' total stays
+    // with their row in the details (A').
     final totals = [
       for (final c in counts)
-        if (c.$1.capacity case final n?) (n, c.$2),
+        if (c.$1.capacity case final n? when !borrowed(c)) (n, c.$2),
     ];
     final total = totals.isNotEmpty
         ? totals.fold<int>(0, (a, b) => a + b.$1)
