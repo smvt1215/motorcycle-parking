@@ -5,7 +5,7 @@ import '../models/zone_entries.dart';
 import 'eligibility.dart';
 import 'parking_decision.dart';
 import 'rider_meter_display.dart';
-import 'segment_decision.dart' show openWindow;
+import 'segment_decision.dart' show openWindow, scheduleSilentFor;
 
 /// How a count reads on the map and in the details. Whether a rider may
 /// park and whether a space is free are separate: nothing here looks at
@@ -188,6 +188,9 @@ bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
     }
     return false;
   }
+  // A schedule that lists no slot for heavy bikes states no time they may
+  // park (待確認), as the four signs read the lot.
+  if (scheduleSilentFor(spot.condition, VehicleType.heavy)) return false;
   return openNow(decision.status, spot.condition);
 }
 

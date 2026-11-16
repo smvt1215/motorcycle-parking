@@ -467,6 +467,52 @@ void main() {
       );
     });
 
+    test('沒有分區、時段只列普通機車：膠囊與篩選不借用（Codex P2 第 2 輪）', () {
+      final scooterSlots = ParkingSpot.fromJson({
+        ...lotJson(const []),
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'share',
+          'share': 'scooter_heavy',
+          'charge': 'toll',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '08:00',
+              'to': '20:00',
+              'vehicles': ['scooter'],
+            },
+          ],
+        },
+      });
+      expect(motorcycleBaysAllShared(scooterSlots), isTrue);
+      final decision = judged(scooterSlots, VehicleType.heavy);
+      final counts = SpotAvailability([scooter12, heavyNone]);
+      expect(
+        markerCapsules(scooterSlots, counts, VehicleType.heavy, decision, day),
+        isEmpty,
+      );
+      expect(
+        availabilityExclusion(
+          AvailabilityFilter.available,
+          scooterSlots,
+          counts,
+          VehicleType.heavy,
+          EligibilityStatus.allowed,
+          day,
+          decision: decision,
+        ),
+        AvailabilityExclusion.noData,
+      );
+      expect(
+        sign(scooterSlots, VehicleType.heavy, [
+          scooter12,
+          heavyNone,
+        ]).seat.shared,
+        isFalse,
+      );
+    });
+
     test('重機自己的有效數字優先', () {
       final heavy = count(AvailabilityVehicle.heavy, 3, total: 10);
       final f = availabilityFact(
