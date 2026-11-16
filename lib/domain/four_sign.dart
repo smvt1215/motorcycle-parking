@@ -1028,8 +1028,11 @@ SeatAnswer _seat(
       // bays the lot opens to them.
       groups[availabilityVehicle(vehicle)] = const [];
       // A lot of 普大共用格 alone (A'): heavy bikes may read the scooter
-      // count, after their own (below).
-      if (vehicle == VehicleType.heavy && motorcycleBaysAllShared(spot)) {
+      // count, after their own (below), only while the lot is open to them
+      // now (places may be the lot open later, when nothing is open now).
+      if (vehicle == VehicleType.heavy &&
+          motorcycleBaysAllShared(spot) &&
+          places.every((a) => a.window.now)) {
         groups[AvailabilityVehicle.scooter] = const [];
       }
     } else {

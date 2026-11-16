@@ -589,6 +589,41 @@ void main() {
       expect((late.available, late.shared), (12, true));
     });
 
+    test('沒有分區、整點公告此時沒開放：路牌不借用（Codex P2 第 4 輪）', () {
+      final evening = ParkingSpot.fromJson({
+        ...lotJson(const []),
+        'condition': {
+          'bay': 'motorcycle',
+          'use': 'share',
+          'share': 'scooter_heavy',
+          'charge': 'toll',
+          'schedule': [
+            {
+              'days': 'all',
+              'from': '20:00',
+              'to': '23:00',
+              'vehicles': ['scooter', 'heavy'],
+            },
+          ],
+        },
+      });
+      expect(motorcycleBaysAllShared(evening), isTrue);
+      final s = sign(evening, VehicleType.heavy, [scooter12, heavyNone]);
+      expect(s.seat.shared, isFalse);
+      expect(s.seat.available, isNull);
+      final decision = judged(evening, VehicleType.heavy);
+      expect(
+        markerCapsules(
+          evening,
+          SpotAvailability([scooter12, heavyNone]),
+          VehicleType.heavy,
+          decision,
+          day,
+        ),
+        isEmpty,
+      );
+    });
+
     test('重機自己的有效數字優先', () {
       final heavy = count(AvailabilityVehicle.heavy, 3, total: 10);
       final f = availabilityFact(
