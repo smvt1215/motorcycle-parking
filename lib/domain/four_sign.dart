@@ -685,8 +685,10 @@ BayKind? _zoneBay(ParkingZone z) => bayKindOf(_zoneCondition(z));
 /// bays heavy bikes may not use. The one exception (A', 2026-11-15): on a
 /// 普大共用 zone of a lot whose motorcycle bays are all 普大共用
 /// ([allShared], [motorcycleBaysAllShared]), the scooter count is those
-/// shared bays' count, read as such ([sharedScooterCount]). A lot that
-/// also has scooter-only motorcycle bays keeps none on its shared zones.
+/// shared bays' count, read as such ([sharedScooterCount]), while every
+/// shared zone is open to heavy bikes now (the count covers them all). A
+/// lot that also has scooter-only motorcycle bays keeps none on its shared
+/// zones.
 AvailabilityVehicle? _countClass(
   ParkingZone z,
   VehicleType vehicle, {
@@ -717,31 +719,45 @@ List<SignArea> _lotAreas(
       whole.status == EligibilityStatus.allowed ||
       whole.status == EligibilityStatus.conditional;
   if (zones.length == spot.zones.length && zones.any((z) => z.hasData)) {
-    final allShared = motorcycleBaysAllShared(spot);
+    final statuses = [
+      for (final z in zones)
+        lotOpen || z.status == EligibilityStatus.notAllowed
+            ? z.status
+            : EligibilityStatus.unverified,
+    ];
+    final windows = [
+      for (final (i, zone) in spot.zones.indexed)
+        openWindow(
+          statuses[i],
+          _zoneCondition(zone),
+          vehicle,
+          now,
+          calendar: calendar,
+          basis: whole.basis,
+        ),
+    ];
+    // The scooter count covers every shared zone: heavy bikes read it only
+    // while each of them is open to them now (A').
+    final allShared =
+        motorcycleBaysAllShared(spot) &&
+        [
+          for (final (i, zone) in spot.zones.indexed)
+            if (_zoneBay(zone) == BayKind.scooterHeavy) windows[i].now,
+        ].every((open) => open);
     return [
       for (final (i, z) in zones.indexed)
         () {
-          final status = lotOpen || z.status == EligibilityStatus.notAllowed
-              ? z.status
-              : EligibilityStatus.unverified;
           final zone = spot.zones[i];
           return SignArea(
             id: zone.id,
             name: z.name.trim(),
-            status: status,
+            status: statuses[i],
             restriction: lotOpen ? z.restriction : null,
             bayKind: _zoneBay(zone),
             countClass: _countClass(zone, vehicle, allShared: allShared),
             zone: zone,
             condition: _zoneCondition(zone),
-            window: openWindow(
-              status,
-              _zoneCondition(zone),
-              vehicle,
-              now,
-              calendar: calendar,
-              basis: whole.basis,
-            ),
+            window: windows[i],
           );
         }(),
     ];

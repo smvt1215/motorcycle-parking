@@ -121,9 +121,9 @@ bool _countShown(AvailabilitySnapshot s, DateTime now) =>
 /// 普大共用 ([motorcycleBaysAllShared]) the scooter count when the heavy
 /// count shows nothing (no value, stale, invalid) and the scooter count
 /// does (fresh, delayed or suspended), read as the four signs read it:
-/// - only while [decision] opens a 普大共用 place to heavy bikes now (a
-///   shared zone whose notice has lapsed does not lend its count to a
-///   heavy-only zone still open);
+/// - only while [decision] opens every 普大共用 place to heavy bikes now
+///   (a shared zone whose notice has lapsed, or closed to them while
+///   scooters park, keeps the count from them);
 /// - after the counts of heavy bikes' own bays: a heavy count that shows,
 ///   or a car count that shows where [decision] opens car bays to them
 ///   ([heavyCarOpen]; the pills then show the car pill instead).
@@ -160,10 +160,10 @@ AvailabilitySnapshot? lotCount(
   return own;
 }
 
-/// Whether [decision] opens a 普大共用 place of [spot] to heavy bikes now
-/// (its window, as the four signs read it): a shared zone open now, or,
-/// for a lot standing as one (no zones, or zones that say nothing), the
-/// lot itself.
+/// Whether [decision] opens the 普大共用 places of [spot] to heavy bikes
+/// now (their windows, as the four signs read them): every shared zone,
+/// since the scooter count covers them all, or, for a lot standing as one
+/// (no zones, or zones that say nothing), the lot itself.
 bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
   bool openNow(EligibilityStatus status, ParkingCondition? condition) =>
       openWindow(
@@ -179,14 +179,15 @@ bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
         decision.status != EligibilityStatus.conditional) {
       return false;
     }
+    var any = false;
     for (var i = 0; i < zones.length; i++) {
       final c =
           spot.zones[i].condition ?? zoneConditionOf(spot.zones[i].access);
-      if (bayKindOf(c) == BayKind.scooterHeavy && openNow(zones[i].status, c)) {
-        return true;
-      }
+      if (bayKindOf(c) != BayKind.scooterHeavy) continue;
+      if (!openNow(zones[i].status, c)) return false;
+      any = true;
     }
-    return false;
+    return any;
   }
   // A schedule that lists no slot for heavy bikes states no time they may
   // park (待確認), as the four signs read the lot.

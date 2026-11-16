@@ -513,6 +513,82 @@ void main() {
       );
     });
 
+    test('兩個共用區只有一區此時對重機開放：膠囊、篩選與路牌都不借用（Codex P2 第 3 輪）', () {
+      final partly = ParkingSpot.fromJson(
+        lotJson([
+          sharedZone,
+          {
+            'id': 'b4',
+            'name': 'B4 機車區',
+            'condition': {
+              'bay': 'motorcycle',
+              'use': 'share',
+              'share': 'scooter_heavy',
+              'allow': {'scooter': true, 'heavy': true},
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '08:00',
+                  'to': '20:00',
+                  'vehicles': ['scooter'],
+                },
+                {
+                  'days': 'all',
+                  'from': '20:00',
+                  'to': '23:00',
+                  'vehicles': ['heavy'],
+                },
+              ],
+            },
+          },
+        ]),
+      );
+      expect(motorcycleBaysAllShared(partly), isTrue);
+      final decision = judged(partly, VehicleType.heavy);
+      final counts = SpotAvailability([scooter12, heavyNone]);
+      expect(
+        markerCapsules(partly, counts, VehicleType.heavy, decision, day),
+        isEmpty,
+      );
+      expect(
+        availabilityExclusion(
+          AvailabilityFilter.available,
+          partly,
+          counts,
+          VehicleType.heavy,
+          EligibilityStatus.allowed,
+          day,
+          decision: decision,
+        ),
+        AvailabilityExclusion.noData,
+      );
+      final s = sign(partly, VehicleType.heavy, [scooter12, heavyNone]);
+      expect(s.seat.shared, isFalse);
+      expect(s.seat.available, isNull);
+      // At 21:00 both shared zones are open to heavy bikes: the count is
+      // theirs again.
+      final night = DateTime.utc(2026, 11, 3, 13);
+      final late = fourSign(
+        partly,
+        VehicleType.heavy,
+        rules,
+        now: night,
+        availability: SpotAvailability([
+          AvailabilitySnapshot(
+            spotId: 'binjiang',
+            vehicle: AvailabilityVehicle.scooter,
+            provider: '臺北市停管處',
+            window: AvailabilityWindow.taipei,
+            total: 40,
+            available: 12,
+            sourceUpdatedAt: night.subtract(const Duration(minutes: 2)),
+          ),
+          heavyNone,
+        ]),
+      ).seat;
+      expect((late.available, late.shared), (12, true));
+    });
+
     test('重機自己的有效數字優先', () {
       final heavy = count(AvailabilityVehicle.heavy, 3, total: 10);
       final f = availabilityFact(
