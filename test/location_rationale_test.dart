@@ -152,6 +152,16 @@ void main() {
     await closeLegend(tester);
   });
 
+  test('地圖定位的用途照實寫：座標在手機上算，附近的範圍會送伺服器（#476）', () {
+    final (_, name, detail) = LocationRationaleCard.uses.first;
+    expect(name, '地圖定位與附近排序');
+    expect(
+      detail,
+      '顯示你在哪裡，並依距離排列停車點。你的座標只在手機上計算；地圖移到你附近後，這一帶的範圍會送到我們的伺服器讀取停車點。',
+    );
+    expect(detail, isNot(contains('不會上傳')));
+  });
+
   testWidgets('iOS 的說明卡只有「繼續」，沒有先不要', (tester) async {
     debugDefaultTargetPlatformOverride = TargetPlatform.iOS;
     final device = FakeLocationDevice();
@@ -370,6 +380,7 @@ void main() {
       ('手機', const Size(390, 844), 1.0, false),
       ('手機深色', const Size(390, 844), 1.0, true),
       ('小手機字級 1.3', const Size(360, 640), 1.3, false),
+      ('320 寬字級 2.0', const Size(320, 640), 2.0, false),
       ('手機字級 2.0', const Size(390, 844), 2.0, false),
       ('平板', const Size(820, 1180), 1.0, false),
       ('平板字級 2.0', const Size(820, 1180), 2.0, true),
