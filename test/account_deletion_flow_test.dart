@@ -17,6 +17,7 @@ import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/account_deletion_display.dart';
 import 'package:motorcycle_parking/features/auth/brand_sign_in_button.dart';
+import 'package:motorcycle_parking/features/auth/profile_editor.dart';
 import 'package:motorcycle_parking/features/settings/account_deletion_page.dart';
 import 'package:motorcycle_parking/features/settings/settings_page.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
@@ -260,6 +261,85 @@ void main() {
     expect(find.text('刪除前，先看看你的資料會怎麼處理。'), findsOneWidget);
     expect(tester.takeException(), isNull);
   }, variant: platforms);
+
+  // Q190L2-4 (#190): 帳號與設定 in the side panel's place on a tablet,
+  // 刪除帳號 a page of its own over it.
+  for (final size in const [Size(820, 1180), Size(1180, 820)]) {
+    testWidgets('P10 平板 ${size.width.toInt()}×${size.height.toInt()}：'
+        '在左側面板；編輯個人資料疊在同一個位置；刪除帳號是整頁，返回回到面板；'
+        '申請完成後回到地圖', (tester) async {
+      final app = await _mount(
+        tester,
+        FakeDeletionGateway(current: google(signedInAt: now)),
+        size: size,
+      );
+      tester.view.display.size = size;
+      addTearDown(tester.view.display.reset);
+      showSettings(_appContext(tester), app.store);
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+      Rect panel() => tester.getRect(
+        find.byKey(const ValueKey('side-panel')).hitTestable().last,
+      );
+      final settings = panel();
+      expect(settings.left, (isCupertino ? 0 : tabletRailWidth) + 16);
+      expect(settings.width, sidePanelWidth);
+      expect(settings.bottom, size.height);
+      // P12 over it, in the same place.
+      await tester.tap(find.byTooltip('編輯個人資料'));
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfileEditor), findsOneWidget);
+      expect(panel(), settings);
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(ProfileEditor), findsNothing);
+      // P15a stays a page of its own; back comes to the panel again.
+      final delete = find.byKey(const ValueKey('settings-delete-account'));
+      Future<void> openDeletion() async {
+        await tester.scrollUntilVisible(
+          delete,
+          200,
+          scrollable: find
+              .descendant(
+                of: find.byType(ListView).last,
+                matching: find.byType(Scrollable),
+              )
+              .first,
+        );
+        await tester.pumpAndSettle();
+        await tester.tap(delete);
+        await tester.pumpAndSettle();
+      }
+
+      await openDeletion();
+      expect(find.text('刪除前，先看看你的資料會怎麼處理。'), findsOneWidget);
+      expect(
+        tester.getSize(find.byType(AccountDeletionPage)).width,
+        size.width,
+      );
+      expect(
+        find.byKey(const ValueKey('side-panel')).hitTestable(),
+        findsNothing,
+      );
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(find.byType(AccountDeletionPage), findsNothing);
+      expect(panel(), settings);
+      expect(delete.hitTestable(), findsOneWidget);
+      // The request ends on the notice, then the map, with nothing left of
+      // the panel.
+      await openDeletion();
+      await _tapSubmit(tester);
+      await _confirm(tester);
+      expect(find.text('已申請刪除帳號'), findsOneWidget);
+      expect(find.byKey(const ValueKey('side-panel')), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('deletion-notice-done')));
+      await tester.pumpAndSettle();
+      expect(find.byKey(const ValueKey('parking-search')), findsOneWidget);
+      expect(find.text('帳號與設定'), findsNothing);
+      expect(tester.takeException(), isNull);
+    }, variant: platforms);
+  }
 
   for (final size in sizes) {
     testWidgets('P10 ${size.width.toInt()}×${size.height.toInt()}：'

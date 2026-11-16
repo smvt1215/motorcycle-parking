@@ -30,6 +30,9 @@ export '../../core/policy_links.dart' show policyUrls;
 
 /// 帳號與設定 (P10): the account, 關於 (version, licenses, data sources,
 /// privacy policy and terms) and, signed in, 刪除帳號 in its own group.
+/// On a tablet it takes the side panel's place (P10: T1, T2), and what it
+/// opens there (P12, P11, P17c) stacks in the same place; 刪除帳號 (P15a)
+/// stays a page of its own, and closing it comes back here.
 Future<void> showSettings(BuildContext context, AppStore store) {
   AccountDeletionController? deletion;
   AccountStatusController? status;
@@ -46,6 +49,8 @@ Future<void> showSettings(BuildContext context, AppStore store) {
   }
   return showAdaptiveSheet<void>(
     context,
+    // Opened from the shell's app bar, above the page it marks.
+    sidePanel: true,
     (ctx) => ContentPage(
       children: [
         // The vehicle is switched beside what it changes: the map's

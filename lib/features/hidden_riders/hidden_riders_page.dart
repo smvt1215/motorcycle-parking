@@ -9,11 +9,25 @@ import '../../ui/adaptive/adaptive.dart';
 import '../auth/sign_in.dart';
 import 'hide_rider.dart';
 
-/// Opens 已隱藏的車友 (P17c) over 帳號與設定.
+/// Opens 已隱藏的車友 (P17c) over 帳號與設定: a page of its own, or on a
+/// tablet over 帳號與設定 in the side panel's place (P17c ⑤⑥), its back
+/// button leading back there.
 Future<void> openHiddenRiders(BuildContext context, AppStore store) {
   // What the list shows should be what the account has now.
   unawaited(store.hiddenRiders.readBack());
-  return Navigator.of(context, rootNavigator: true).push(
+  final navigator = Navigator.of(context, rootNavigator: true);
+  if (sidePanelHost(context) && isTabletLayout(context)) {
+    return navigator.push(
+      SidePanelRoute<void>(
+        nested: SidePanelScope.isIn(context),
+        // The 復原 toast stays in the panel, above the scrim, instead of
+        // the page dimmed behind it.
+        builder: (_) =>
+            ScaffoldMessenger(child: HiddenRidersPage(store: store)),
+      ),
+    );
+  }
+  return navigator.push(
     isCupertino
         ? cu.CupertinoPageRoute<void>(
             builder: (_) => HiddenRidersPage(store: store),
