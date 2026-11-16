@@ -772,7 +772,10 @@ class _BayRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   [
-                    _bayLabels.firstWhere((b) => b.$1 == c.bay).$2,
+                    if (c.bay == null)
+                      '格位未確認'
+                    else
+                      _bayLabels.firstWhere((b) => b.$1 == c.bay).$2,
                     if (c.share == ShareKind.scooterHeavy) '普大共用',
                     if (c.share == ShareKind.carMotorcycle) '汽機共用',
                     switch (c.charge) {
