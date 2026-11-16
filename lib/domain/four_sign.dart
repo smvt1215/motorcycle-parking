@@ -1084,15 +1084,15 @@ SeatAnswer _seat(
     final best = usable[bestAt];
     // Only counts in the same pool say another place has space: with fresh
     // ones, a delayed count never does.
-    int places((AvailabilitySnapshot, List<SignArea>) c) =>
+    int placeCount((AvailabilitySnapshot, List<SignArea>) c) =>
         c.$2.isEmpty ? 1 : c.$2.length;
     final more = [
       for (final i in pool)
-        if (i != bestAt && usable[i].$1.available! > 0) places(usable[i]),
+        if (i != bestAt && usable[i].$1.available! > 0) placeCount(usable[i]),
       for (final c in aside)
         if (c.$1.available! > 0 &&
             (!anyFresh || c.$1.status(now) == AvailabilityStatus.fresh))
-          places(c),
+          placeCount(c),
     ].fold<int>(0, (a, b) => a + b);
     // The report beside the count: of the place the count is about when
     // there is one, else the best (A11 cards 1, 2, 4).
