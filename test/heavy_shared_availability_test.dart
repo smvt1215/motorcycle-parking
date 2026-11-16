@@ -865,6 +865,27 @@ void main() {
       expect(sign(withCar, VehicleType.heavy, list).seat.shared, isTrue);
     });
 
+    test('汽車格勝出時，篩選仍讀共用數字，不因汽車空位較多而排除（Codex P2 第 6 輪）', () {
+      final decision = decideParking(
+        withCar,
+        VehicleType.heavy,
+        const [],
+        now: day,
+      );
+      AvailabilityExclusion? reason(int carFree) => availabilityExclusion(
+        AvailabilityFilter.available,
+        withCar,
+        SpotAvailability([car(carFree), shared(3), heavyNone]),
+        VehicleType.heavy,
+        EligibilityStatus.allowed,
+        day,
+        decision: decision,
+      );
+      expect(primary([car(12), shared(3), heavyNone]).style, CapsuleStyle.car);
+      expect(reason(12), isNull);
+      expect(reason(2), isNull);
+    });
+
     test('兩者都延遲：空位多的當主答案', () {
       final list = [car(3, minutes: 15), shared(12, minutes: 15), heavyNone];
       final p = primary(list);

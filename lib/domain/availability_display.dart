@@ -142,14 +142,18 @@ bool _countShown(AvailabilitySnapshot s, DateTime now) =>
 ///   [decision] opens car bays to them now ([heavyCarOpen], read by their
 ///   windows as the four signs read them), only where it is the better
 ///   ([sharedBeatsCar]); else the pills show the car pill instead.
-/// Without [decision] the scooter count is never read.
+/// Without [decision] the scooter count is never read. [beside] false
+/// skips the car comparison: the 「目前有位」 filter reads the shared count
+/// whichever answers on the pills (car bays never count there), so more
+/// car space never takes it away.
 AvailabilitySnapshot? lotCount(
   ParkingSpot spot,
   SpotAvailability availability,
   VehicleType vehicle,
   ParkingDecision? decision,
-  DateTime now,
-) {
+  DateTime now, {
+  bool beside = true,
+}) {
   final own = availability.of(availabilityVehicle(vehicle));
   if (vehicle != VehicleType.heavy ||
       decision == null ||
@@ -172,7 +176,8 @@ AvailabilitySnapshot? lotCount(
   // count stands only where it is the better of the two ([sharedBeatsCar]);
   // otherwise the car pill answers.
   final car = availability.of(AvailabilityVehicle.car);
-  if (car != null &&
+  if (beside &&
+      car != null &&
       _countShown(car, now) &&
       _carOpenNow(spot, decision, now) &&
       !(_countShown(scooter, now) && sharedBeatsCar(scooter, car, now))) {
@@ -732,7 +737,14 @@ AvailabilityExclusion? availabilityExclusion(
   if (!spot.isFacility) return AvailabilityExclusion.roadside;
   // The same count as the pills (A', [lotCount]); without [decision] the
   // vehicle's own count alone.
-  final own = lotCount(spot, availability, vehicle, decision, now);
+  final own = lotCount(
+    spot,
+    availability,
+    vehicle,
+    decision,
+    now,
+    beside: false,
+  );
   switch (own?.status(now)) {
     case null:
     case AvailabilityStatus.unavailable:
