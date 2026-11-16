@@ -329,8 +329,21 @@ void main() {
           VehicleType.heavy,
           EligibilityStatus.allowed,
           day,
+          decision: judged(noZones, VehicleType.heavy),
         ),
         isNull,
+      );
+      // Without the judgement the filter reads the heavy count alone.
+      expect(
+        availabilityExclusion(
+          AvailabilityFilter.available,
+          noZones,
+          counts,
+          VehicleType.heavy,
+          EligibilityStatus.allowed,
+          day,
+        ),
+        AvailabilityExclusion.noData,
       );
     });
 
@@ -354,8 +367,103 @@ void main() {
           VehicleType.heavy,
           EligibilityStatus.allowed,
           day,
+          decision: judged(mixed, VehicleType.heavy),
         ),
         AvailabilityExclusion.noData,
+      );
+    });
+
+    test('共用區此時沒對重機開放、只有重機專區開放：膠囊與篩選不借用（Codex P2）', () {
+      final lapsed = ParkingSpot.fromJson(
+        lotJson([
+          {
+            ...sharedZone,
+            'condition': {
+              ...sharedZone['condition']! as Map<String, Object>,
+              'schedule': [
+                {
+                  'days': 'all',
+                  'from': '20:00',
+                  'to': '23:00',
+                  'vehicles': ['scooter', 'heavy'],
+                },
+              ],
+            },
+          },
+          heavyZone,
+        ]),
+      );
+      expect(motorcycleBaysAllShared(lapsed), isTrue);
+      final decision = judged(lapsed, VehicleType.heavy);
+      expect(decision.status, isNot(EligibilityStatus.notAllowed));
+      final counts = SpotAvailability([scooter12, heavyNone]);
+      expect(
+        markerCapsules(lapsed, counts, VehicleType.heavy, decision, day),
+        isEmpty,
+      );
+      expect(
+        availabilityExclusion(
+          AvailabilityFilter.available,
+          lapsed,
+          counts,
+          VehicleType.heavy,
+          EligibilityStatus.allowed,
+          day,
+          decision: decision,
+        ),
+        AvailabilityExclusion.noData,
+      );
+      // The four signs agree: the open heavy zone has no count, only its
+      // total.
+      final seat = sign(lapsed, VehicleType.heavy, [scooter12, heavyNone]).seat;
+      expect((seat.kind, seat.shared), (SeatKind.total, false));
+    });
+
+    test('對重機開放的汽車格有數字時，主膠囊仍是汽車格，不借用機車數（Codex P2）', () {
+      final withCar = ParkingSpot.fromJson(
+        lotJson([
+          sharedZone,
+          {
+            'id': 'c1',
+            'name': 'B4 汽車區',
+            'condition': {
+              'bay': 'car',
+              'use': 'share',
+              'share': 'car_motorcycle',
+              'allow': {'heavy': true},
+            },
+          },
+        ]),
+      );
+      expect(motorcycleBaysAllShared(withCar), isTrue);
+      final decision = judged(withCar, VehicleType.heavy);
+      final counts = SpotAvailability([
+        count(AvailabilityVehicle.scooter, 0),
+        heavyNone,
+        count(AvailabilityVehicle.car, 3, total: 100),
+      ]);
+      final all = markerCapsules(
+        withCar,
+        counts,
+        VehicleType.heavy,
+        decision,
+        day,
+      );
+      expect(all.map((c) => c.style), [CapsuleStyle.car]);
+      final primary = primaryCapsules(
+        withCar,
+        VehicleType.heavy,
+        decision,
+        all,
+      ).single;
+      expect((primary.text, primary.style), ('剩 3', CapsuleStyle.car));
+      expect(
+        sign(withCar, VehicleType.heavy, [
+          count(AvailabilityVehicle.scooter, 0),
+          heavyNone,
+          count(AvailabilityVehicle.car, 3, total: 100),
+        ]).seat.available,
+        3,
       );
     });
 

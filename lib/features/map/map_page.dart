@@ -631,6 +631,7 @@ class _MapPageState extends ConsumerState<MapPage> {
           store.vehicle,
           store.eligible(s).status,
           now,
+          decision: store.decide(s),
         );
         if (reason != null) excluded.add((s, reason));
         return reason != null;
