@@ -233,6 +233,20 @@ void main() {
   });
 
   group('詳情逐區列', () {
+    test('濱江國中（單一分區）：唯一一列寫剩餘數並標共用', () {
+      final counts = SpotAvailability([scooter12, heavyNone]);
+      final rows = seatRows(
+        sign(binjiang, VehicleType.heavy, [scooter12, heavyNone]),
+        counts,
+        day,
+      );
+      expect(rows, hasLength(1));
+      expect(rows.single.official, '剩 12 格');
+      expect(rows.single.counted, isTrue);
+      expect(rows.single.officialNote, contains(sharedWithScooterLabel));
+      expect(rows.single.officialNote, isNot(contains(notForHeavyNote)));
+    });
+
     test('全場共用：共用區列寫剩餘數並標「與普通機車共用」', () {
       final counts = SpotAvailability([scooter12, heavyNone]);
       final rows = seatRows(
