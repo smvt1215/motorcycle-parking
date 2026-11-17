@@ -1,6 +1,7 @@
 import 'package:flutter_svg/flutter_svg.dart' show PictureInfo;
 import 'package:go_router/go_router.dart';
 
+import '../../domain/availability_display.dart';
 import '../../domain/eligibility.dart';
 import '../../domain/map_legend_display.dart';
 import '../../models/parking.dart';
@@ -53,11 +54,22 @@ double spotMarkerRadius(EligibilityStatus status) => switch (status) {
   EligibilityStatus.notAllowed => 4,
 };
 
-/// The spot's corner badge, from the bay kind painted there (#188's seven
-/// kinds): none for a plain 一般機車格. A lot, or a street bay that reads
-/// as a plain one, falls back to the access the spot reports, as before
-/// the kinds: 大重專用, 大汽共用 and 普大共用.
-SpaceBadge? spaceBadge(ParkingSpot spot) {
+/// The spot's corner badge for [vehicle], from the bay kind painted there
+/// (#188's seven kinds): none for a plain 一般機車格. A street bay that
+/// reads as a plain one falls back to the access the spot reports.
+///
+/// A lot (#492, #493; only [SpaceBadge.generalHeavy] depends on
+/// [vehicle]):
+/// - its motorcycle bays all admit heavy bikes by stated conditions and
+///   some are plain 一般機車格 ([BorrowedBays.general], M1): the ink
+///   circle for heavy bikes, none for scooters. A lot-level legacy
+///   `access: scooterHeavy` is ignored there, for both vehicles: the zones
+///   state more than it does (user decision 2026-11-17);
+/// - else the access the lot reports, as before the zones' badges: 大重專用,
+///   大汽共用 and 普大共用 (a legacy access alone keeps its badge, K1);
+/// - else, every motorcycle bay explicitly 普大共用
+///   ([BorrowedBays.shared]): the white and yellow square.
+SpaceBadge? spaceBadge(ParkingSpot spot, VehicleType vehicle) {
   final street = !isOffStreet(spot.spaceType, spot.facilityType);
   final kind = street
       ? bayKindOf(spot.condition ?? conditionOf(spot.spaceType))
@@ -65,19 +77,27 @@ SpaceBadge? spaceBadge(ParkingSpot spot) {
   if (kind != null) {
     if (SpaceBadge.ofBay(kind) case final badge?) return badge;
   }
-  return switch (reportedAccess(spot)) {
+  final access = reportedAccess(spot);
+  final borrowed = street ? null : borrowedBays(spot);
+  if (borrowed == BorrowedBays.general &&
+      (access == null || access == ParkingAccess.scooterHeavy)) {
+    return vehicle == VehicleType.heavy ? SpaceBadge.generalHeavy : null;
+  }
+  return switch (access) {
     ParkingAccess.heavyOnly => SpaceBadge.heavyOnly,
     ParkingAccess.heavyCar => SpaceBadge.car,
     ParkingAccess.scooterHeavy => SpaceBadge.shared,
-    _ => null,
+    _ => borrowed == BorrowedBays.shared ? SpaceBadge.shared : null,
   };
 }
 
 /// The badge's icon; both heavy-bike badges draw the IconScout silhouette
 /// when the build carries it ([heavyGlyph]) and Material's two-wheeler
-/// otherwise.
+/// otherwise. 一般機車格可停 draws Material's step-through moped, apart
+/// from either (no icon file enters the repository).
 IconData? spaceBadgeIcon(SpaceBadge badge) => switch (badge) {
   SpaceBadge.heavyOnly || SpaceBadge.shared => heavyGlyphFallback,
+  SpaceBadge.generalHeavy => Icons.moped,
   SpaceBadge.car || SpaceBadge.carMotorcycle => Icons.directions_car,
   SpaceBadge.disabled => Icons.accessible,
   SpaceBadge.ev => Icons.ev_station,
@@ -95,8 +115,9 @@ Color? spaceBadgeAccent(SpaceBadge badge) => switch (badge) {
 
 /// Paints [badge] filling [rect] (A0, 19 units across): a white circle for
 /// a dedicated bay, a square split white and its accent for a shared one,
-/// a 1.5 ink outline and the 12.5 icon or 13 silhouette. The Flutter marker
-/// and the Google bitmap both paint it here.
+/// a 1.5 ink outline and the 12.5 icon or 13 silhouette. 一般機車格可停
+/// (G1) is the reverse: an ink disc, a 2 white ring and a white icon. The
+/// Flutter marker, the pills and the Google bitmaps all paint it here.
 void paintSpaceBadge(
   Canvas canvas,
   Rect rect,
@@ -108,9 +129,12 @@ void paintSpaceBadge(
     rect,
     Radius.circular(badge.square ? 5 * unit : rect.width / 2),
   );
+  final inverse = badge == SpaceBadge.generalHeavy;
+  final ground = inverse ? badgeInk : Colors.white;
+  final line = inverse ? Colors.white : badgeInk;
   canvas.save();
   canvas.clipRRect(shape);
-  canvas.drawRect(rect, Paint()..color = Colors.white);
+  canvas.drawRect(rect, Paint()..color = ground);
   if (spaceBadgeAccent(badge) case final accent?) {
     // CSS linear-gradient(135deg, white 50%, accent 50%): the lower right
     // half, below the diagonal from top right to bottom left.
@@ -124,11 +148,11 @@ void paintSpaceBadge(
     );
   }
   canvas.restore();
-  final stroke = 1.5 * unit;
+  final stroke = (inverse ? 2 : 1.5) * unit;
   canvas.drawRRect(
     shape.deflate(stroke / 2),
     Paint()
-      ..color = badgeInk
+      ..color = line
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke,
   );
@@ -148,7 +172,7 @@ void paintSpaceBadge(
     text: TextSpan(
       text: String.fromCharCode(icon.codePoint),
       style: TextStyle(
-        color: badgeInk,
+        color: line,
         fontSize: 12.5 * unit,
         height: 1,
         fontFamily: icon.fontFamily,

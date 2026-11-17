@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/features/map/map_legend.dart';
+import 'package:motorcycle_parking/features/map/map_legend.dart' as legend;
 import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
@@ -20,6 +21,13 @@ void main() {
     scooterAllowed: scooter,
     heavyAllowed: heavy,
   );
+
+  // These badges are the same for both vehicles.
+  SpaceBadge? spaceBadge(ParkingSpot spot) {
+    final badge = legend.spaceBadge(spot, VehicleType.scooter);
+    expect(legend.spaceBadge(spot, VehicleType.heavy), badge);
+    return badge;
+  }
 
   test('汽車格、重機專用格與普大共用格各有角落圖示', () {
     expect(spaceBadge(spot(SpaceType.car)), SpaceBadge.car);

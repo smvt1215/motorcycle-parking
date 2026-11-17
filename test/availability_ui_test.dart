@@ -51,6 +51,13 @@ Finder capsule(String text) => find.descendant(
   matching: find.text(text),
 );
 
+/// The car badge before a car-bay pill's count (#492), not a marker's
+/// corner badge.
+final carBadge = find.descendant(
+  of: find.byType(AvailabilityCapsuleView),
+  matching: find.byKey(const ValueKey('space-badge-car')),
+);
+
 Future<void> tapFilter(WidgetTester tester) async {
   final pill = find.byKey(const ValueKey('availability-filter'));
   await tester.ensureVisible(pill);
@@ -273,7 +280,7 @@ void main() {
       );
       expect(capsule('剩 3'), findsNWidgets(2));
       expect(capsule('剩 30'), findsNWidgets(2));
-      expect(find.byType(CapsuleCar), findsNWidgets(2));
+      expect(carBadge, findsNWidgets(2));
       expect(find.byType(CapsuleClock), findsOneWidget);
       // The scooter count of h4 never stands in for heavy bikes.
       expect(capsule('剩 12'), findsNothing);
@@ -294,13 +301,13 @@ void main() {
         vehicle: VehicleType.heavy,
       );
       expect(capsule('剩 3'), findsNWidgets(9));
-      expect(find.byType(CapsuleCar), findsNothing);
+      expect(carBadge, findsNothing);
       await tester.tap(find.bySemanticsLabel(RegExp('^測試停車場 row1 ')));
       await tester.pumpAndSettle();
       // row1 is open: its car pill joins; row0 and row2 touch it and hide.
       // The camera centres row1 above the details, which moves row4 off
       // screen: 9 - 2 hidden - 1 off screen.
-      expect(find.byType(CapsuleCar), findsOneWidget);
+      expect(carBadge, findsOneWidget);
       expect(capsule('剩 3'), findsNWidgets(6));
       expect(tester.takeException(), isNull);
       await tester.pumpWidget(const SizedBox.shrink());
@@ -315,7 +322,7 @@ void main() {
     });
   });
 
-  testWidgets('圖例列出即時、已滿、延遲、暫停與汽車格膠囊', (tester) async {
+  testWidgets('圖例列出即時、已滿、延遲、暫停與沒有數字', (tester) async {
     useSize(tester, 390);
     await pumpMap(tester, canvasSpots, canvasCounts);
     await tester.tap(find.byKey(const ValueKey('map-legend-button')));
@@ -327,11 +334,12 @@ void main() {
       scrollable: find.byType(Scrollable).last,
     );
     for (final line in [
-      '官方即時剩餘格數',
-      '更新延遲，數字可能已變',
+      '普通機車格的剩餘',
+      '有時鐘：資料晚到',
       '官方資料目前沒有空位',
-      '場站暫停營運',
-      '空位未知或不能停時不掛。',
+      '停車場暫時不開',
+      '沒有數字：不知道有沒有位',
+      '切到大型重機時，數字前可能多一枚小圖示，說明數字算的是哪種格位。',
     ]) {
       expect(find.text(line), findsOneWidget);
     }

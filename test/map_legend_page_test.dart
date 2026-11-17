@@ -189,17 +189,19 @@ void main() {
           ),
         );
     await pump(VehicleType.heavy, availability: true);
-    expect(find.text('汽車格的剩餘格數'), findsOneWidget);
+    expect(find.text('汽車格的剩餘'), findsOneWidget);
+    expect(find.text('重機格位的剩餘'), findsOneWidget);
     expect(find.textContaining('「大型重機」'), findsOneWidget);
     await pump(VehicleType.scooter, availability: true);
-    expect(find.text('官方即時剩餘格數'), findsOneWidget);
-    expect(find.text('汽車格的剩餘格數'), findsNothing);
+    expect(find.text('普通機車格的剩餘'), findsOneWidget);
+    expect(find.text('汽車格的剩餘'), findsNothing);
     await pump(VehicleType.heavy, availability: false);
-    expect(find.text('官方即時剩餘格數'), findsNothing);
+    expect(find.text('重機格位的剩餘'), findsNothing);
+    expect(find.text('標記上方的數字'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Google 標記圖依外觀逐一產生：六種徽章、無徽章與選取都畫得出來', (tester) async {
+  testWidgets('Google 標記圖依外觀逐一產生：七種小章、無小章與選取都畫得出來', (tester) async {
     for (final badge in [null, ...SpaceBadge.values]) {
       for (final selected in [false, true]) {
         final icon = await tester.runAsync(
@@ -242,7 +244,7 @@ void main() {
         for (final heading in [
           '停車點標記',
           '有條件的圖示',
-          '格位徽章：圖示＝格位類別，白圓＝專用，方形＝共用',
+          '標記右下角的小圖示',
           '車友回報角標（15 分鐘內，淺灰底量表）',
           '其他狀態',
         ]) {

@@ -18,8 +18,9 @@ import 'availability_display.dart'
     show
         notForHeavyNote,
         scooterCountLine,
-        sharedScooterCount,
-        sharedWithScooterLabel;
+        BorrowedBays,
+        explicitlyGeneralHeavy,
+        sharedScooterCount;
 import 'eligibility.dart';
 import 'four_sign.dart';
 import 'four_sign_display.dart';
@@ -582,22 +583,30 @@ SeatRow _seatRow(
       officialNote: [
         if (delayed) '更新延遲',
         if (at != null) agoText(at, now),
-        // The scooter count on 普大共用格 (A'): scooters park there too.
-        if (sharedScooterCount(s.vehicle, a.countClass)) sharedWithScooterLabel,
+        // The scooter count heavy bikes borrow (A', #493): scooters park
+        // there too. Named for the lot, as the plate and the pill name it
+        // (M1): zones sharing the count share the word.
+        if (sharedScooterCount(s.vehicle, a.countClass))
+          (s.areas.any((b) => explicitlyGeneralHeavy(b.zone?.condition))
+                  ? BorrowedBays.general
+                  : BorrowedBays.shared)
+              .label,
       ].join('・'),
     );
   }
   final total = a.total ?? snapshot?.capacity;
   final official = total == null ? '空位未知' : '共 $total 格';
   final officialNote = total == null ? '' : '空位未知';
-  // A 普大共用 zone of a lot that also has scooter-only bays (A'): no
-  // count for heavy bikes, the scooter count beside it as the summary
-  // without zones writes it, never standing for heavy bikes.
+  // A 普大共用 zone, or plain bays open to heavy bikes (#493), of a lot
+  // that also has scooter-only bays (A'): no count for heavy bikes, the
+  // scooter count beside it as the summary without zones writes it, never
+  // standing for heavy bikes.
   final scooter = availability.of(AvailabilityVehicle.scooter);
   if (!s.street &&
       s.vehicle == VehicleType.heavy &&
       a.countClass == null &&
-      a.bayKind == BayKind.scooterHeavy &&
+      (a.bayKind == BayKind.scooterHeavy ||
+          explicitlyGeneralHeavy(a.zone?.condition)) &&
       scooter != null &&
       _shown(scooter, now)) {
     final at = scooter.sourceUpdatedAt;

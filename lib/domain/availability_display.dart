@@ -1,7 +1,9 @@
 import '../models/availability.dart';
 import '../models/parking.dart';
 import '../models/parking_condition.dart';
+import '../models/zone_entries.dart';
 import 'eligibility.dart';
+import 'map_legend_display.dart' show SpaceBadge;
 import 'parking_decision.dart';
 import 'rider_meter_display.dart';
 import 'segment_decision.dart' show openWindow, scheduleSilentFor;
@@ -73,55 +75,137 @@ const sharedWithScooterSpoken = '普大共用，與普通機車共用格位';
 /// After the scooter count shown beside a heavy-bike 空位未知.
 const notForHeavyNote = '不代表重機可用格數';
 
-/// Whether every motorcycle bay of [spot] is a 普大共用格, so the lot's
-/// scooter count is the count of bays heavy bikes share (A'). Read from the
-/// data alone, the same way for the four signs, the details, the map's
-/// pills and the 「目前有位」 filter:
+/// What the scooter count heavy bikes borrow stands for (#493): the two are
+/// different things and never share a name or a badge.
+enum BorrowedBays {
+  /// Every motorcycle bay is a 普大共用格: 「普大共用」, the white and yellow
+  /// square.
+  shared,
+
+  /// At least one zone is plain 一般機車格 that states heavy bikes may
+  /// park, alone or beside 普大共用格 (M1, user decision 2026-11-17: the
+  /// lighter word where the count mixes both): 「一般機車格可停」, the ink
+  /// circle.
+  general;
+
+  /// Beside the count: on the plate, the rows and the summary.
+  String get label => switch (this) {
+    shared => sharedWithScooterLabel,
+    general => generalHeavyLabel,
+  };
+
+  /// [label] where it does not fit a line (the plate at large text); null
+  /// when there is no shorter word.
+  String? get shortLabel => switch (this) {
+    shared => null,
+    general => generalHeavyShortLabel,
+  };
+
+  /// [label] for screen readers, after a count.
+  String get spoken => switch (this) {
+    shared => sharedWithScooterSpoken,
+    general => generalHeavySpoken,
+  };
+
+  /// Before a pill's count for screen readers (design #492 v3).
+  String get source => switch (this) {
+    shared => '普大共用格，與普通機車共用',
+    general => generalHeavySpoken,
+  };
+
+  /// The badge before the pill's count and on the marker's corner.
+  SpaceBadge get badge => switch (this) {
+    shared => SpaceBadge.shared,
+    general => SpaceBadge.generalHeavy,
+  };
+}
+
+/// Beside a count heavy bikes read from the scooter count of plain
+/// 一般機車格 that admit them (#493, T3, user decision 2026-11-17).
+const generalHeavyLabel = '一般機車格可停';
+
+/// [generalHeavyLabel] only where its seven characters do not fit a line.
+const generalHeavyShortLabel = '一般格可停';
+
+/// [generalHeavyLabel] for screen readers (design #492 v3).
+const generalHeavySpoken = '一般機車格可停，大型重機也可以停，與普通機車共用';
+
+/// Whether heavy bikes may read [spot]'s scooter count, and as what (A',
+/// #493): every motorcycle bay of the lot is one heavy bikes share with
+/// scooters, a 普大共用格 or a plain 一般機車格 that states they may park.
+/// Read from the data alone, the same way for the four signs, the details,
+/// the map's pills and badges and the 「目前有位」 filter:
 /// - a lot only (street spots have no official count);
-/// - 普大共用 only where a condition states it ([explicitlyShared]): a
-///   legacy `access: scooterHeavy` alone is the importer's guess for a
-///   機車區, often one whose heavy bikes park on 重機專用格, so it may hold
-///   scooter-only bays (user decision 2026-11-16, #489). Elsewhere (停哪裡,
-///   the decision) it still reads as 普大共用格;
+/// - only where a stored condition states it ([explicitlyShared],
+///   [explicitlyGeneralHeavy]): a legacy `access: scooterHeavy` alone is
+///   the importer's guess for a 機車區, often one whose heavy bikes park on
+///   重機專用格, so it may hold scooter-only bays (user decision 2026-11-16,
+///   #489). Elsewhere (停哪裡, the decision) it still reads as 普大共用格;
 /// - zones that say something (a condition or a legacy access; as
-///   [decideParking] reads them): at least one zone is explicitly 普大共用
-///   and every other zone has no motorcycle bay: heavy-only or car bays,
-///   or no bay with scooters excluded. Any zone that says nothing, a
-///   legacy 普大共用 zone, motorcycle bays of another kind (一般、身障、
-///   充電) or no bay without excluding scooters may hold scooter-only bays
-///   the count includes: false. Heavy-only zones never matter.
-///   [ParkingSpot.zonesComplete] is not required;
-/// - no zone says anything: the lot's own condition is explicitly 普大共用.
-bool motorcycleBaysAllShared(ParkingSpot spot) {
-  if (!spot.isFacility) return false;
+///   [decideParking] reads them): at least one zone lends its count and
+///   every other zone has no motorcycle bay: heavy-only or car bays, or no
+///   bay with scooters excluded. Any zone that says nothing, a legacy
+///   普大共用 zone, motorcycle bays of another kind (一般 without heavy
+///   bikes、身障、充電) or no bay without excluding scooters may hold
+///   scooter-only bays the count includes: null. Heavy-only zones never
+///   matter. [ParkingSpot.zonesComplete] is not required;
+/// - no zone says anything: the lot's own condition is explicitly 普大共用
+///   (a lot's condition carries no `allow`, so it never states 一般格准重機).
+BorrowedBays? borrowedBays(ParkingSpot spot) {
+  if (!spot.isFacility) return null;
   final zones = [
     for (final z in spot.zones) (z.condition ?? zoneConditionOf(z.access), z),
   ];
   if (zones.any((c) => c.$1 != null)) {
-    var shared = false;
+    var shared = false, general = false;
     for (final (c, z) in zones) {
-      if (c == null) return false;
+      if (c == null) return null;
       if (explicitlyShared(z.condition)) {
         shared = true;
+      } else if (explicitlyGeneralHeavy(z.condition)) {
+        general = true;
       } else if (c.bay == Bay.motorcycle ||
           (c.bay == null && c.allow?.scooter != false)) {
-        return false;
+        return null;
       }
     }
-    return shared;
+    return general
+        ? BorrowedBays.general
+        : shared
+        ? BorrowedBays.shared
+        : null;
   }
-  return explicitlyShared(spot.condition);
+  return explicitlyShared(spot.condition) ? BorrowedBays.shared : null;
 }
 
+/// Whether every motorcycle bay of [spot] is explicitly a 普大共用格
+/// ([borrowedBays]): the only lots that wear the white and yellow square
+/// for their zones.
+bool motorcycleBaysAllShared(ParkingSpot spot) =>
+    borrowedBays(spot) == BorrowedBays.shared;
+
 /// Whether [condition], as stored (never one a legacy access stands for),
-/// states 普大共用格: the only bays whose scooter count heavy bikes may read
-/// (#489).
+/// states 普大共用格 (#489).
 bool explicitlyShared(ParkingCondition? condition) =>
     condition?.share == ShareKind.scooterHeavy;
 
-/// Whether [count], read for [vehicle], is the scooter count standing for
-/// 普大共用格 (A'): heavy bikes reading it are marked
-/// [sharedWithScooterLabel].
+/// Whether [condition], as stored, states plain 一般機車格 that heavy bikes
+/// may park on (#493): a motorcycle bay of no other kind (not 普大共用,
+/// 身障 or 充電), `allow.heavy` true (官方未標示 is not yes) and scooters
+/// not excluded, so the scooter count is these bays' count.
+bool explicitlyGeneralHeavy(ParkingCondition? condition) =>
+    condition != null &&
+    bayKindOf(condition) == BayKind.motorcycle &&
+    condition.allow?.heavy == true &&
+    condition.allow?.scooter != false;
+
+/// Whether the zone or lot [condition] (as stored) lends its scooter count
+/// to heavy bikes where the whole lot does ([borrowedBays]).
+bool lendsScooterCount(ParkingCondition? condition) =>
+    explicitlyShared(condition) || explicitlyGeneralHeavy(condition);
+
+/// Whether [count], read for [vehicle], is the scooter count heavy bikes
+/// borrow (A', #493): it is marked with the lot's [BorrowedBays].
 bool sharedScooterCount(VehicleType vehicle, AvailabilityVehicle? count) =>
     vehicle == VehicleType.heavy && count == AvailabilityVehicle.scooter;
 
@@ -157,7 +241,7 @@ AvailabilitySnapshot? lotCount(
   final own = availability.of(availabilityVehicle(vehicle));
   if (vehicle != VehicleType.heavy ||
       decision == null ||
-      !motorcycleBaysAllShared(spot) ||
+      borrowedBays(spot) == null ||
       !_sharedOpenNow(spot, decision, now)) {
     return own;
   }
@@ -206,8 +290,9 @@ bool sharedBeatsCar(
   return a != null && b != null && a.isAfter(b);
 }
 
-/// Whether [decision] opens the 普大共用 places of [spot] to heavy bikes
-/// now (their windows, as the four signs read them): every shared zone,
+/// Whether [decision] opens the places of [spot] that lend their count
+/// ([lendsScooterCount]) to heavy bikes now (their windows, as the four
+/// signs read them): every such zone,
 /// since the scooter count covers them all, or, for a lot standing as one
 /// (no zones, or zones that say nothing), the lot itself.
 bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
@@ -229,7 +314,7 @@ bool _sharedOpenNow(ParkingSpot spot, ParkingDecision decision, DateTime now) {
     for (var i = 0; i < zones.length; i++) {
       final c =
           spot.zones[i].condition ?? zoneConditionOf(spot.zones[i].access);
-      if (!explicitlyShared(spot.zones[i].condition)) continue;
+      if (!lendsScooterCount(spot.zones[i].condition)) continue;
       if (!openNow(zones[i].status, c)) return false;
       any = true;
     }
@@ -294,9 +379,6 @@ enum CapsuleStyle {
   /// Outlined with a clock: the last count, past the window.
   delayed,
 
-  /// Paper with a thin ink outline and a car: car bays heavy bikes may use.
-  car,
-
   /// Light grey with ink text: an official count of zero, apart from the
   /// ink pill of a lot with space.
   full,
@@ -314,7 +396,7 @@ class AvailabilityCapsule {
     required this.text,
     required this.style,
     required this.semantics,
-    this.delayed = false,
+    this.badge,
   }) : meter = null;
 
   /// The riders' badge, where a space pill would sit (A0).
@@ -322,17 +404,19 @@ class AvailabilityCapsule {
     : text = meter.label,
       style = CapsuleStyle.rider,
       semantics = meter.semantics,
-      delayed = false;
+      badge = null;
 
   /// What [CapsuleStyle.rider] draws.
   final RiderMeter? meter;
   final String text;
   final CapsuleStyle style;
 
-  /// A car-bay count past its window: the car style keeps, with a clock
-  /// before the number (the [CapsuleStyle.delayed] outline is for the
-  /// rider's own class only).
-  final bool delayed;
+  /// Whose bays the count is of, where not the rider's own (#492, plan B):
+  /// the corner badge of that bay kind, drawn before the number.
+  /// [SpaceBadge.car] for car bays heavy bikes may use, [SpaceBadge.shared]
+  /// or [SpaceBadge.generalHeavy] for the scooter count they borrow; null
+  /// for the vehicle's own count. The style says only how fresh it is (B2).
+  final SpaceBadge? badge;
 
   /// What a screen reader says, e.g. 「官方即時：剩 12 格」.
   final String semantics;
@@ -343,11 +427,11 @@ class AvailabilityCapsule {
       other.text == text &&
       other.style == style &&
       other.semantics == semantics &&
-      other.delayed == delayed &&
+      other.badge == badge &&
       other.meter == meter;
 
   @override
-  int get hashCode => Object.hash(text, style, semantics, delayed, meter);
+  int get hashCode => Object.hash(text, style, semantics, badge, meter);
 }
 
 /// Whether [capsule] is an official count, not the riders' badge.
@@ -393,66 +477,76 @@ List<AvailabilityCapsule> _officialCapsules(
   ParkingDecision decision,
   DateTime now,
 ) {
-  // A heavy bike on a lot of 普大共用格 alone reads the scooter count
-  // (A', [lotCount]); the pill has no room to say so, the screen reader
-  // does. (Pending PM: whether the pill and the filter read it at all.)
+  // A heavy bike on a lot whose motorcycle bays all admit it reads the
+  // scooter count (A', #493, [lotCount]); the pill carries those bays'
+  // badge and the screen reader names them first.
   final own = lotCount(spot, availability, vehicle, decision, now);
-  final shared = sharedScooterCount(vehicle, own?.vehicle)
-      ? '（$sharedWithScooterSpoken）'
-      : '';
+  final borrowed = sharedScooterCount(vehicle, own?.vehicle)
+      ? borrowedBays(spot)
+      : null;
   final capsules = <AvailabilityCapsule>[
     if (own != null)
-      ...switch (own.status(now)) {
-        AvailabilityStatus.fresh => [
-          AvailabilityCapsule(
-            text: _count(own.available!),
-            style: own.available == 0 ? CapsuleStyle.full : CapsuleStyle.live,
-            semantics: own.available == 0
-                ? '官方即時：已滿$shared'
-                : '官方即時：剩 ${own.available} 格$shared',
-          ),
-        ],
-        AvailabilityStatus.delayed => [
-          AvailabilityCapsule(
-            text: _count(own.available!),
-            style: CapsuleStyle.delayed,
-            semantics:
-                '更新延遲 ${own.ageMinutes(now)} 分鐘：最後一筆'
-                '${own.available == 0 ? '已滿' : '剩 ${own.available} 格'}'
-                '$shared',
-          ),
-        ],
-        AvailabilityStatus.suspended => [
-          const AvailabilityCapsule(
-            text: '暫停',
-            style: CapsuleStyle.suspended,
-            semantics: '暫停營運',
-          ),
-        ],
-        _ => const <AvailabilityCapsule>[],
-      },
+      if (own.status(now) == AvailabilityStatus.suspended)
+        const AvailabilityCapsule(
+          text: '暫停',
+          style: CapsuleStyle.suspended,
+          semantics: '暫停營運',
+        )
+      else
+        ?_countCapsule(
+          own,
+          now,
+          source: borrowed?.source,
+          badge: borrowed?.badge,
+        ),
   ];
   final car = availability.of(AvailabilityVehicle.car);
-  final carStatus = car?.status(now);
   if (vehicle == VehicleType.heavy &&
       car != null &&
-      heavyCarOpen(spot, decision) &&
-      (carStatus == AvailabilityStatus.fresh ||
-          carStatus == AvailabilityStatus.delayed)) {
-    final delayed = carStatus == AvailabilityStatus.delayed;
-    final count = car.available == 0 ? '已滿' : '剩 ${car.available} 格';
-    capsules.add(
-      AvailabilityCapsule(
-        text: _count(car.available!),
-        style: CapsuleStyle.car,
-        delayed: delayed,
-        semantics: delayed
-            ? '汽車格更新延遲 ${car.ageMinutes(now)} 分鐘：最後一筆$count，大型重機可停汽車格'
-            : '汽車格$count，大型重機可停汽車格',
-      ),
-    );
+      heavyCarOpen(spot, decision)) {
+    if (_countCapsule(car, now, source: carBaySource, badge: SpaceBadge.car)
+        case final pill?) {
+      capsules.add(pill);
+    }
   }
   return capsules;
+}
+
+/// Before a car-bay pill's count for screen readers (design #492 v3).
+const carBaySource = '汽車格，大型重機現在可停';
+
+/// The pill of [count] while it is fresh or delayed, else null. [source]
+/// names whose bays it counts where not the rider's own, and [badge] draws
+/// them; the style is the same for every source (B2).
+AvailabilityCapsule? _countCapsule(
+  AvailabilitySnapshot count,
+  DateTime now, {
+  String? source,
+  SpaceBadge? badge,
+}) {
+  final full = count.available == 0;
+  final left = full ? '已滿' : '剩 ${count.available} 格';
+  switch (count.status(now)) {
+    case AvailabilityStatus.fresh:
+      return AvailabilityCapsule(
+        text: _count(count.available!),
+        style: full ? CapsuleStyle.full : CapsuleStyle.live,
+        badge: badge,
+        semantics: source == null ? '官方即時：$left' : '$source：官方即時$left',
+      );
+    case AvailabilityStatus.delayed:
+      final age = count.ageMinutes(now);
+      return AvailabilityCapsule(
+        text: _count(count.available!),
+        style: CapsuleStyle.delayed,
+        badge: badge,
+        semantics: source == null
+            ? '更新延遲 $age 分鐘：最後一筆$left'
+            : '$source：更新延遲 $age 分鐘，最後一筆$left',
+      );
+    default:
+      return null;
+  }
 }
 
 /// The one pill a crowded marker keeps, chosen by the parking rules; the
@@ -474,9 +568,9 @@ List<AvailabilityCapsule> primaryCapsules(
       decision.status == EligibilityStatus.unverified) {
     return const [];
   }
-  final own = capsules.where((c) => c.style != CapsuleStyle.car);
+  final own = capsules.where((c) => c.badge != SpaceBadge.car);
   if (own.isNotEmpty) return [own.first];
-  final car = capsules.where((c) => c.style == CapsuleStyle.car);
+  final car = capsules.where((c) => c.badge == SpaceBadge.car);
   return vehicle == VehicleType.heavy &&
           car.isNotEmpty &&
           heavyCarOpen(spot, decision)
@@ -563,7 +657,10 @@ AvailabilityFact availabilityFact(
   // A heavy bike on a lot of 普大共用格 alone reads the scooter count
   // there (A', [lotCount]), named as shared.
   final own = lotCount(spot, availability, vehicle, decision, now);
-  final shared = sharedScooterCount(vehicle, own?.vehicle);
+  final borrowed = sharedScooterCount(vehicle, own?.vehicle)
+      ? borrowedBays(spot)
+      : null;
+  final shared = borrowed != null;
   final notes = _notes(spot, availability, vehicle, decision, own, now);
   // Whose bays: the vehicle's, or the shared ones (named in the caption).
   String? capacity(AvailabilitySnapshot own) => own.total == null
@@ -571,12 +668,14 @@ AvailabilityFact availabilityFact(
       : shared
       ? '／ 共 ${own.total} 格'
       : '／ 共 ${own.total} 格（${vehicle.label}）';
-  String withShared(String caption, [String label = sharedWithScooterLabel]) =>
-      shared
-      ? [caption, label].where((t) => t.isNotEmpty).join(' ・ ')
+  String withShared(String caption, [String? label]) => borrowed != null
+      ? [
+          caption,
+          label ?? borrowed.label,
+        ].where((t) => t.isNotEmpty).join(' ・ ')
       : caption;
   String? spoken(String caption) =>
-      shared ? withShared(caption, sharedWithScooterSpoken) : null;
+      borrowed != null ? withShared(caption, borrowed.spoken) : null;
   final staticTotal =
       own?.capacity ??
       (vehicle == VehicleType.scooter && (spot.scooterTotal ?? 0) > 0

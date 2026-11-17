@@ -9,6 +9,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:motorcycle_parking/data/repositories.dart';
 import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
+import 'package:motorcycle_parking/domain/map_legend_display.dart';
 import 'package:motorcycle_parking/domain/map_viewport.dart';
 import 'package:motorcycle_parking/domain/spot_clusters.dart';
 import 'package:motorcycle_parking/features/map/google_parking_map.dart';
@@ -475,8 +476,9 @@ void addSelectionTests() {
     );
     const car = AvailabilityCapsule(
       text: '剩 3',
-      style: CapsuleStyle.car,
-      semantics: '汽車格剩 3 格',
+      style: CapsuleStyle.live,
+      badge: SpaceBadge.car,
+      semantics: '汽車格，大型重機現在可停：官方即時剩 3 格',
     );
     // At zoom 16 a pixel is about 2.15e-5 of longitude here: a and b sit
     // 30 apart (crowded), c 400 away.

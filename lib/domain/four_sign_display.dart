@@ -10,8 +10,7 @@ import '../models/fee.dart';
 import '../models/holiday_calendar.dart' show taipeiDateMinute;
 import '../models/parking.dart';
 import '../models/space_kind.dart';
-import 'availability_display.dart'
-    show availabilityClock, sharedWithScooterLabel, sharedWithScooterSpoken;
+import 'availability_display.dart' show availabilityClock;
 import 'eligibility.dart';
 import 'four_sign.dart';
 import 'parking_decision.dart';
@@ -53,6 +52,7 @@ class SignPlate {
     required this.tone,
     required this.semantics,
     this.note = '',
+    this.shortNote,
     this.tag,
     this.meters = const [],
   });
@@ -61,6 +61,12 @@ class SignPlate {
 
   /// Lines under [main], joined by `\n`; empty for none.
   final String note;
+
+  /// [note] with a shorter word, for a plate too narrow at its text size
+  /// to keep a line of [note] whole (「一般機車格可停」 → 「一般格可停」,
+  /// #493): the plate measures and picks. Null when [note] has no shorter
+  /// form. Screen readers always hear the full words ([semantics]).
+  final String? shortNote;
   final PlateTone tone;
 
   /// A small ink tag under the note (「另 1 區有位」).
@@ -408,20 +414,27 @@ SignPlate _seatPlate(FourSign s, DateTime now) {
       final main = full ? '已滿' : '剩 ${seat.available} 格';
       final delayed = seat.kind == SeatKind.delayed;
       final ago = seat.at == null ? '' : agoText(seat.at!, now);
+      // Whose bays a borrowed count is of, on a line of its own: the
+      // plate never breaks inside it, and falls back to the shorter word
+      // only where the line does not fit (#493).
+      String note(String? borrowed) => [
+        shown,
+        ?borrowed,
+        if (delayed) '更新延遲',
+        ago,
+      ].where((t) => t.isNotEmpty).join('\n');
       return SignPlate(
         face: FourSignFace.seat,
         main: main,
-        note: [
-          shown,
-          if (seat.shared) sharedWithScooterLabel,
-          if (delayed) '更新延遲',
-          ago,
-        ].where((t) => t.isNotEmpty).join('\n'),
+        note: note(seat.borrowed?.label),
+        shortNote: seat.borrowed?.shortLabel == null
+            ? null
+            : note(seat.borrowed!.shortLabel),
         tone: delayed ? PlateTone.delayed : PlateTone.line,
         tag: more,
         semantics: spoken([
           '$named$main',
-          if (seat.shared) sharedWithScooterSpoken,
+          ?seat.borrowed?.spoken,
           delayed ? '官方資料更新延遲' : '官方即時',
           if (ago.isNotEmpty) '$ago更新',
         ]),
