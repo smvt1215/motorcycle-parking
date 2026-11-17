@@ -6,6 +6,7 @@ import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
 import 'package:motorcycle_parking/domain/four_sign.dart';
 import 'package:motorcycle_parking/domain/four_sign_display.dart';
+import 'package:motorcycle_parking/domain/map_legend_display.dart';
 import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/domain/spot_detail_display.dart';
 import 'package:motorcycle_parking/models/availability.dart';
@@ -360,7 +361,8 @@ void main() {
         day,
       ).single;
       expect(capsule.text, '剩 12');
-      expect(capsule.semantics, contains(sharedWithScooterSpoken));
+      expect(capsule.semantics, '普大共用格，與普通機車共用：官方即時剩 12 格');
+      expect(capsule.badge, SpaceBadge.shared);
       expect(
         availabilityExclusion(
           AvailabilityFilter.available,
@@ -489,14 +491,14 @@ void main() {
         decision,
         day,
       );
-      expect(all.map((c) => c.style), [CapsuleStyle.car]);
+      expect(all.map((c) => c.badge), [SpaceBadge.car]);
       final primary = primaryCapsules(
         withCar,
         VehicleType.heavy,
         decision,
         all,
       ).single;
-      expect((primary.text, primary.style), ('剩 3', CapsuleStyle.car));
+      expect((primary.text, primary.badge), ('剩 3', SpaceBadge.car));
       expect(
         sign(withCar, VehicleType.heavy, [
           count(AvailabilityVehicle.scooter, 0),
@@ -700,7 +702,7 @@ void main() {
         VehicleType.heavy,
         decision,
         day,
-      ).where((c) => c.style != CapsuleStyle.car);
+      ).where((c) => c.badge != SpaceBadge.car);
       expect(own.single.text, '剩 12');
       expect(
         availabilityExclusion(
@@ -830,7 +832,7 @@ void main() {
     test('汽車格新、共用延遲：汽車格當主答案，共用不算另一區有位', () {
       final list = [car(3), shared(12, minutes: 15), heavyNone];
       final p = primary(list);
-      expect((p.text, p.style), ('剩 3', CapsuleStyle.car));
+      expect((p.text, p.badge), ('剩 3', SpaceBadge.car));
       final s = sign(withCar, VehicleType.heavy, list).seat;
       expect((s.kind, s.available, s.shared), (SeatKind.live, 3, false));
       expect(s.more, 0);
@@ -851,14 +853,14 @@ void main() {
       expect((s.available, s.shared, s.more), (12, true, 1));
       list = [car(12), shared(3), heavyNone];
       p = primary(list);
-      expect((p.text, p.style), ('剩 12', CapsuleStyle.car));
+      expect((p.text, p.badge), ('剩 12', SpaceBadge.car));
       s = sign(withCar, VehicleType.heavy, list).seat;
       expect((s.available, s.shared, s.more), (12, false, 1));
     });
 
     test('一樣新、空位數相同：較新的當主答案，時間也相同時汽車格優先', () {
       var list = [car(5), shared(5), heavyNone];
-      expect(primary(list).style, CapsuleStyle.car);
+      expect(primary(list).badge, SpaceBadge.car);
       expect(sign(withCar, VehicleType.heavy, list).seat.shared, isFalse);
       list = [car(5, minutes: 4), shared(5, minutes: 1), heavyNone];
       expect(primary(list).style, CapsuleStyle.live);
@@ -881,7 +883,7 @@ void main() {
         day,
         decision: decision,
       );
-      expect(primary([car(12), shared(3), heavyNone]).style, CapsuleStyle.car);
+      expect(primary([car(12), shared(3), heavyNone]).badge, SpaceBadge.car);
       expect(reason(12), isNull);
       expect(reason(2), isNull);
     });

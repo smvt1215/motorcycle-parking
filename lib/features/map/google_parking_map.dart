@@ -27,6 +27,7 @@ class GoogleParkingMap extends StatefulWidget {
     required this.center,
     required this.spots,
     required this.eligibility,
+    this.vehicle = VehicleType.scooter,
     required this.onViewport,
     required this.onSpotTap,
     required this.interactive,
@@ -45,6 +46,10 @@ class GoogleParkingMap extends StatefulWidget {
   final LatLng center;
   final List<ParkingSpot> spots;
   final Eligibility Function(ParkingSpot) eligibility;
+
+  /// Whose map it is: the corner badge of 一般機車格可停 shows for heavy
+  /// bikes only ([spaceBadge]).
+  final VehicleType vehicle;
   final void Function(MapViewport, LatLng) onViewport;
   final ValueChanged<ParkingSpot> onSpotTap;
   final ValueChanged<LatLng>? onLongPress;
@@ -432,7 +437,7 @@ extension on GoogleParkingMapState {
   gm.Marker? _marker(ParkingSpot spot, {required bool selected}) {
     final icon = _markerIconFor((
       markerLook(widget.eligibility(spot)),
-      spaceBadge(spot),
+      spaceBadge(spot, widget.vehicle),
       selected,
     ));
     if (icon == null) return null;
@@ -528,6 +533,8 @@ const googleMarkerSize = 40.0;
 /// transparent below it (MapBadges board), drawn at 2x.
 @visibleForTesting
 Future<gm.BitmapDescriptor> capsuleIcon(CapsuleKey key) async {
+  // As [markerIcon]: a heavy-bike badge waits for the silhouette.
+  if (key.capsules.any((c) => _heavyBadge(c.badge))) await heavyGlyphSettled;
   final scale = key.selected ? 26 / 24 : 1.0;
   final marker = key.selected
       ? googleMarkerSize * selectedScale
@@ -579,6 +586,10 @@ Future<gm.BitmapDescriptor> _excludedIcon() async {
   );
 }
 
+/// Whether [badge] draws the heavy-bike silhouette.
+bool _heavyBadge(SpaceBadge? badge) =>
+    badge == SpaceBadge.heavyOnly || badge == SpaceBadge.shared;
+
 /// A marker bitmap's look: status and limit, corner badge, selected.
 typedef MarkerKey = (MarkerLook, SpaceBadge?, bool);
 
@@ -591,9 +602,7 @@ Future<gm.BitmapDescriptor> markerIcon(
   SpaceBadge? badge,
   bool selected,
 ) async {
-  if (badge == SpaceBadge.heavyOnly || badge == SpaceBadge.shared) {
-    await heavyGlyphSettled;
-  }
+  if (_heavyBadge(badge)) await heavyGlyphSettled;
   final scale = selected ? selectedScale : 1.0;
   final side = (96 * scale).roundToDouble();
   final recorder = ui.PictureRecorder();

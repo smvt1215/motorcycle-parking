@@ -303,6 +303,13 @@ class _MapPageState extends ConsumerState<MapPage> {
     rider: store.riderMeter(s),
   );
 
+  /// A marker for screen readers: the name, whether the rider may park,
+  /// and the corner badge by the bay name the pills use (#492).
+  String _markerLabel(AppStore store, ParkingSpot s) => [
+    '${s.name} ${store.eligible(s).label}',
+    ?spaceBadge(s, store.vehicle)?.label,
+  ].join('，');
+
   List<AvailabilityCapsule> _primaryOf(
     AppStore store,
     ParkingSpot s,
@@ -1006,6 +1013,7 @@ class _MapPageState extends ConsumerState<MapPage> {
             center: LatLng(store.lat, store.lng),
             spots: spots,
             eligibility: store.eligible,
+            vehicle: store.vehicle,
             interactive: mapInteractive(
               showControls: widget.showControls,
               covered: widget.covered,
@@ -1133,7 +1141,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                     ? 48
                                     : capsuleBoxHeight,
                                 child: Semantics(
-                                  label: '${s.name} ${store.eligible(s).label}',
+                                  label: _markerLabel(store, s),
                                   button: true,
                                   child: GestureDetector(
                                     onTap: () => _showSpot(s),
@@ -1141,7 +1149,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                       capsules: capsules,
                                       marker: SpotMarker(
                                         look: markerLook(store.eligible(s)),
-                                        badge: spaceBadge(s),
+                                        badge: spaceBadge(s, store.vehicle),
                                       ),
                                     ),
                                   ),
@@ -1160,7 +1168,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                       width: openCapsules.isEmpty ? 56 : capsuleBoxWidth,
                       height: openCapsules.isEmpty ? 56 : capsuleBoxHeight,
                       child: Semantics(
-                        label: '${open.name} ${store.eligible(open).label}，已選取',
+                        label: '${_markerLabel(store, open)}，已選取',
                         button: true,
                         // Its own tap, as on the Google map: never a tap on
                         // the empty map, which would close the details.
@@ -1173,7 +1181,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                             marker: SpotMarker(
                               key: const ValueKey('selected-spot-marker'),
                               look: markerLook(store.eligible(open)),
-                              badge: spaceBadge(open),
+                              badge: spaceBadge(open, store.vehicle),
                               selected: true,
                             ),
                           ),
@@ -1491,7 +1499,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                                   dimension: 32,
                                   child: SpotMarker(
                                     look: markerLook(store.eligible(spot)),
-                                    badge: spaceBadge(spot),
+                                    badge: spaceBadge(spot, store.vehicle),
                                     size: 28,
                                   ),
                                 ),

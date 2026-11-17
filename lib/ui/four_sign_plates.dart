@@ -65,11 +65,17 @@ class FourSignPlates extends StatelessWidget {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
+      final grid = plates.length > 1 && gridFor(context, constraints.maxWidth);
+      final gap = grid ? 8.0 : 6.0;
+      // How many plates share a row, and so how wide each is.
+      final perRow = grid ? 2 : plates.length;
+      final width = (constraints.maxWidth - gap * (perRow - 1)) / perRow;
       final tiles = [
         for (final p in plates)
           _Plate(
             key: ValueKey('four-sign-${p.face.name}'),
             plate: p,
+            width: width,
             compact: compact,
             dense: dense,
             // Only a table of contents marks one; elsewhere no plate
@@ -83,8 +89,6 @@ class FourSignPlates extends StatelessWidget {
         // height.
         return dense ? IntrinsicHeight(child: tiles.single) : tiles.single;
       }
-      final grid = gridFor(context, constraints.maxWidth);
-      final gap = grid ? 8.0 : 6.0;
       Widget row(List<Widget> items) => IntrinsicHeight(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -116,11 +120,15 @@ class _Plate extends StatelessWidget {
     required this.plate,
     required this.compact,
     required this.current,
+    required this.width,
     this.dense = false,
     this.onTap,
   });
   final SignPlate plate;
   final bool compact, dense;
+
+  /// The plate's width in its row, to fit its note ([_fittedNote]).
+  final double width;
 
   /// Whether this is the section shown; null where nothing is.
   final bool? current;
@@ -264,7 +272,20 @@ class _Plate extends StatelessWidget {
           Text(plate.main, style: big),
           if (plate.note.isNotEmpty) ...[
             const SizedBox(height: 4),
-            Text(plate.note, style: small),
+            // Measured where the text is drawn, so both use one style.
+            Builder(
+              builder: (context) => Text(
+                // Inside the 6 padding either side, the 1.5 outline and,
+                // around the plate shown, its 2 ring and 2 gap.
+                _fittedNote(
+                  context,
+                  plate,
+                  small,
+                  width - 12 - 3 - (current == true ? 8 : 0),
+                ),
+                style: small,
+              ),
+            ),
           ],
           if (plate.tag case final tag?) ...[
             const SizedBox(height: 4),
@@ -409,6 +430,37 @@ extension on _Plate {
             ),
     );
   }
+}
+
+/// [plate]'s note for a plate [width] wide: the note while each of its
+/// lines fits at the current text size, else its shorter form (#493:
+/// 「一般機車格可停」 is never broken or cut; where its seven characters
+/// do not fit, 「一般格可停」 stands in, on this plate only). Measured
+/// here, not by a LayoutBuilder: the plates sit in an IntrinsicHeight.
+String _fittedNote(
+  BuildContext context,
+  SignPlate plate,
+  TextStyle style,
+  double width,
+) {
+  final short = plate.shortNote;
+  if (short == null) return plate.note;
+  final resolved = DefaultTextStyle.of(context).style.merge(style);
+  final scaler = MediaQuery.textScalerOf(context);
+  final direction = Directionality.of(context);
+  bool fits(String line) {
+    final painter = TextPainter(
+      text: TextSpan(text: line, style: resolved),
+      textDirection: direction,
+      textScaler: scaler,
+      maxLines: 1,
+    )..layout();
+    final ok = painter.width <= width;
+    painter.dispose();
+    return ok;
+  }
+
+  return plate.note.split('\n').every(fits) ? plate.note : short;
 }
 
 /// A plate that dims while pressed, as iOS buttons do.

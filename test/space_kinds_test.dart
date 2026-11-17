@@ -131,7 +131,10 @@ void main() {
   });
 
   test('身障機車格帶角落圖示', () {
-    expect(spaceBadge(spot(SpaceType.disabledMotorcycle)), SpaceBadge.disabled);
+    expect(
+      spaceBadge(spot(SpaceType.disabledMotorcycle), VehicleType.scooter),
+      SpaceBadge.disabled,
+    );
   });
 
   test('收藏快照對舊版保守：新格位降為路外停車場且無可停旗標，新版完整還原', () {

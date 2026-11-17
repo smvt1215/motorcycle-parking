@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:motorcycle_parking/data/availability_repository.dart';
 import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/domain/eligibility.dart';
+import 'package:motorcycle_parking/domain/map_legend_display.dart';
 import 'package:motorcycle_parking/domain/parking_decision.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
@@ -255,13 +256,14 @@ void main() {
       );
     });
 
-    test('汽車格膠囊只在大型重機且判斷開放汽車格時出現，只有汽車圖示與「剩 N」', () {
+    test('汽車格膠囊只在大型重機且判斷開放汽車格時出現，只有汽車小章與「剩 N」', () {
       final car = snap(AvailabilityVehicle.car, total: 100, available: 30);
       final shown = capsules(heavyCarLot, [car], VehicleType.heavy).single;
       expect(
-        (shown.text, shown.style, shown.delayed),
-        ('剩 30', CapsuleStyle.car, false),
+        (shown.text, shown.style, shown.badge),
+        ('剩 30', CapsuleStyle.live, SpaceBadge.car),
       );
+      expect(shown.semantics, '汽車格，大型重機現在可停：官方即時剩 30 格');
       expect(shown.text, isNot(contains('共用')));
       expect(shown.text, isNot(contains('汽車格')));
       expect(capsules(heavyCarLot, [car], VehicleType.scooter), isEmpty);
@@ -275,7 +277,7 @@ void main() {
       expect(capsules(zoned, [car], VehicleType.heavy), hasLength(1));
     });
 
-    test('汽車格延遲照樣顯示（汽車樣式加時鐘），過期與無資料不顯示', () {
+    test('汽車格延遲照樣顯示（延遲樣式加汽車小章），過期與無資料不顯示', () {
       final delayed = capsules(heavyCarLot, [
         snap(
           AvailabilityVehicle.car,
@@ -284,9 +286,12 @@ void main() {
           age: const Duration(minutes: 15),
         ),
       ], VehicleType.heavy).single;
-      expect((delayed.style, delayed.delayed), (CapsuleStyle.car, true));
+      expect(
+        (delayed.style, delayed.badge),
+        (CapsuleStyle.delayed, SpaceBadge.car),
+      );
       expect(delayed.text, '剩 30');
-      expect(delayed.semantics, contains('更新延遲 15 分鐘'));
+      expect(delayed.semantics, '汽車格，大型重機現在可停：更新延遲 15 分鐘，最後一筆剩 30 格');
       for (final car in [
         snap(
           AvailabilityVehicle.car,
@@ -323,8 +328,9 @@ void main() {
     );
     const car = AvailabilityCapsule(
       text: '剩 30',
-      style: CapsuleStyle.car,
-      semantics: '汽車格剩 30 格，大型重機可停汽車格',
+      style: CapsuleStyle.live,
+      badge: SpaceBadge.car,
+      semantics: '汽車格，大型重機現在可停：官方即時剩 30 格',
     );
     const allowed = EligibilityStatus.allowed;
     List<AvailabilityCapsule> primary(
@@ -384,7 +390,7 @@ void main() {
       now,
     );
     bool hasCar(ParkingSpot spot) =>
-        shown(spot).any((c) => c.style == CapsuleStyle.car);
+        shown(spot).any((c) => c.badge == SpaceBadge.car);
     ParkingSpot zoned(
       List<Map<String, Object?>> zones, {
       bool? heavyAllowed = true,

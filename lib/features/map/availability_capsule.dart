@@ -6,20 +6,31 @@ import '../../domain/availability_display.dart';
 import '../../domain/capsule_layout.dart';
 import '../../domain/rider_meter_display.dart';
 import '../../models/parking.dart';
+import 'heavy_glyph.dart';
 import 'map_legend.dart';
 
-/// Paper white behind delayed and car-bay pills, from the design palette.
+/// Paper white behind delayed pills, from the design palette.
 const capsulePaper = Color(0xfff9fbfc);
 
-/// Inner padding (left, right) per style, from the MapBadges board.
-(double, double) _padding(CapsuleStyle style) => switch (style) {
-  CapsuleStyle.live => (10, 9),
-  CapsuleStyle.delayed => (8, 9),
-  CapsuleStyle.car => (8, 9),
-  CapsuleStyle.full => (10, 9),
-  CapsuleStyle.suspended => (8, 9),
-  CapsuleStyle.rider => (8, 8),
-};
+/// Inner padding (left, right) per style, from the MapBadges board. A pill
+/// that starts with its source badge keeps it 2 from the inner edge,
+/// concentric with the pill's round end (#492, plan B).
+(double, double) _padding(AvailabilityCapsule capsule) => capsule.badge != null
+    ? (2, 9)
+    : switch (capsule.style) {
+        CapsuleStyle.live => (10, 9),
+        CapsuleStyle.delayed => (8, 9),
+        CapsuleStyle.full => (10, 9),
+        CapsuleStyle.suspended => (8, 9),
+        CapsuleStyle.rider => (8, 8),
+      };
+
+/// The source badge's side in a pill, and the gap after it: the marker's
+/// corner badge ([paintSpaceBadge], 19 units) drawn 16 across.
+const capsuleBadgeSize = 16.0, _badgeGap = 4.0;
+
+/// The gap after a delayed pill's clock: 3 beside a badge, 4 alone.
+double _clockGap(AvailabilityCapsule capsule) => capsule.badge != null ? 3 : 4;
 
 /// Light grey behind 「已滿」 and deep purple behind 「暫停」 (canvas v30).
 const capsuleFull = Color(0xffc3ccd0), capsuleSuspended = Color(0xff5e4b75);
@@ -44,15 +55,16 @@ double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
     textDirection: TextDirection.ltr,
     textScaler: TextScaler.noScaling,
   )..layout();
-  final (left, right) = _padding(capsule.style);
-  final icons = switch (capsule.style) {
-    CapsuleStyle.live => 0.0,
-    CapsuleStyle.delayed => 12 + 4,
-    CapsuleStyle.car => 12 + 3 + (capsule.delayed ? 12 + 3 : 0),
-    CapsuleStyle.full => 0.0,
-    CapsuleStyle.suspended => 12 + 3,
-    CapsuleStyle.rider => 0.0,
-  };
+  final (left, right) = _padding(capsule);
+  final icons =
+      (capsule.badge != null ? capsuleBadgeSize + _badgeGap : 0.0) +
+      switch (capsule.style) {
+        CapsuleStyle.live => 0.0,
+        CapsuleStyle.delayed => 12 + _clockGap(capsule),
+        CapsuleStyle.full => 0.0,
+        CapsuleStyle.suspended => 12 + 3,
+        CapsuleStyle.rider => 0.0,
+      };
   final width = 4 + left + right + icons + painter.width;
   painter.dispose();
   return width * scale;
@@ -63,16 +75,13 @@ double capsuleWidth(AvailabilityCapsule capsule, {double scale = 1}) {
   CapsuleStyle.live => (badgeInk, Colors.white),
   CapsuleStyle.full => (capsuleFull, badgeInk),
   CapsuleStyle.suspended => (capsuleSuspended, Colors.white),
-  CapsuleStyle.delayed || CapsuleStyle.car => (capsulePaper, badgeInk),
+  CapsuleStyle.delayed => (capsulePaper, badgeInk),
   CapsuleStyle.rider => (riderMeterGround, riderMeterInk),
 };
 
-/// The ink outline inside the white keyline: delayed 2, car bays 1.25.
-double _capsuleOutline(CapsuleStyle style) => switch (style) {
-  CapsuleStyle.delayed => 2.0,
-  CapsuleStyle.car => 1.25,
-  _ => 0.0,
-};
+/// The ink outline inside the white keyline of a delayed pill.
+double _capsuleOutline(CapsuleStyle style) =>
+    style == CapsuleStyle.delayed ? 2.0 : 0.0;
 
 /// Room around a painted row for the pills' shadow (6 blur, 2 down).
 const capsuleShadowRoom = 8.0;
@@ -139,9 +148,19 @@ void _paintCapsule(
     _paintRiderMeter(canvas, inner.outerRect, meter, scale);
     return;
   }
-  final (left, _) = _padding(style);
+  final (left, _) = _padding(capsule);
   var x = inner.left + left * scale;
   final middle = box.center.dy;
+  if (capsule.badge case final badge?) {
+    final side = capsuleBadgeSize * scale;
+    paintSpaceBadge(
+      canvas,
+      Rect.fromLTWH(x, middle - side / 2, side, side),
+      badge,
+      glyph: heavyGlyph.value,
+    );
+    x += side + _badgeGap * scale;
+  }
   void icon(CustomPainter painter, double gap) {
     final side = 12 * scale;
     canvas
@@ -152,10 +171,10 @@ void _paintCapsule(
     x += side + gap * scale;
   }
 
-  final delayed = style == CapsuleStyle.delayed;
   if (style == CapsuleStyle.suspended) icon(_PausePainter(ink), 3);
-  if (style == CapsuleStyle.car) icon(_CarPainter(ink), 3);
-  if (delayed || capsule.delayed) icon(_ClockPainter(ink), delayed ? 4 : 3);
+  if (style == CapsuleStyle.delayed) {
+    icon(_ClockPainter(ink), _clockGap(capsule));
+  }
   final text = TextPainter(
     text: TextSpan(
       text: capsule.text,
@@ -182,8 +201,10 @@ double capsuleRowWidth(
 /// A space count above a marker. Always neutral ink: colour and shape
 /// belong to the eligibility marker alone, so a 「剩 20」 over a red square
 /// never reads as parkable. Every pill has the same 2px white keyline;
-/// delayed and car-bay pills draw their ink outline inside it, so dark and
-/// light pills are the same size.
+/// delayed pills draw their ink outline inside it, so dark and light pills
+/// are the same size. The ground says only how fresh the count is; a count
+/// of bays other than the rider's own starts with those bays' corner badge
+/// (#492, plan B and B2), the clock between badge and number.
 class AvailabilityCapsuleView extends StatelessWidget {
   const AvailabilityCapsuleView({
     super.key,
@@ -203,7 +224,7 @@ class AvailabilityCapsuleView extends StatelessWidget {
     // Solid pills cast .27, the outlined paper ones .2.
     final solid = fill != capsulePaper;
     final delayed = style == CapsuleStyle.delayed;
-    final (left, right) = _padding(style);
+    final (left, right) = _padding(capsule);
     final outline = _capsuleOutline(style);
     return Semantics(
       label: capsule.semantics,
@@ -237,18 +258,17 @@ class AvailabilityCapsuleView extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              if (capsule.badge case final badge?) ...[
+                SpaceBadgeDot(badge: badge, size: capsuleBadgeSize * scale),
+                SizedBox(width: _badgeGap * scale),
+              ],
               if (style == CapsuleStyle.suspended) ...[
                 CapsulePause(size: 12 * scale, color: ink),
                 SizedBox(width: 3 * scale),
               ],
-              if (style == CapsuleStyle.car) ...[
-                CapsuleCar(size: 12 * scale, color: ink),
-                SizedBox(width: 3 * scale),
-              ],
-              if (delayed || capsule.delayed) ...[
+              if (delayed) ...[
                 CapsuleClock(size: 12 * scale, color: ink),
-                // The car pill keeps its 3 gap after the clock as well.
-                SizedBox(width: (delayed ? 4 : 3) * scale),
+                SizedBox(width: _clockGap(capsule) * scale),
               ],
               Text(
                 capsule.text,
@@ -339,55 +359,6 @@ class _ClockPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_ClockPainter old) => old.color != color;
-}
-
-/// The design's line car (2.4 stroke in a 24 box) for car-bay counts.
-class CapsuleCar extends StatelessWidget {
-  const CapsuleCar({super.key, required this.size, required this.color});
-  final double size;
-  final Color color;
-  @override
-  Widget build(BuildContext context) => CustomPaint(
-    key: const ValueKey('capsule-car'),
-    size: Size.square(size),
-    painter: _CarPainter(color),
-  );
-}
-
-class _CarPainter extends CustomPainter {
-  const _CarPainter(this.color);
-  final Color color;
-  @override
-  void paint(Canvas canvas, Size size) {
-    canvas.scale(size.width / 24);
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4
-      ..strokeCap = StrokeCap.round
-      ..strokeJoin = StrokeJoin.round;
-    // M4 16v-3.5L6.2 7h11.6L20 12.5V16z, wheels and the waist line.
-    canvas.drawPath(
-      Path()
-        ..moveTo(4, 16)
-        ..lineTo(4, 12.5)
-        ..lineTo(6.2, 7)
-        ..lineTo(17.8, 7)
-        ..lineTo(20, 12.5)
-        ..lineTo(20, 16)
-        ..close()
-        ..moveTo(6.5, 16)
-        ..lineTo(6.5, 18.5)
-        ..moveTo(17.5, 16)
-        ..lineTo(17.5, 18.5)
-        ..moveTo(4, 12.5)
-        ..lineTo(20, 12.5),
-      paint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_CarPainter old) => old.color != color;
 }
 
 /// The marker box with room above it for pills, symmetric about the

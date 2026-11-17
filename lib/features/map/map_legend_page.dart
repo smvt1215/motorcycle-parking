@@ -63,10 +63,16 @@ class MapLegendPage extends ConsumerWidget {
           24 + MediaQuery.paddingOf(context).bottom,
         ),
         children: [
-          MapLegendContent(
-            vehicle: store.vehicle,
-            availability: store.availabilitySource.enabled,
-            betaCities: store.availabilityBetaCities,
+          // Centred on a wide tablet, where two sections sit side by side.
+          Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 1040),
+              child: MapLegendContent(
+                vehicle: store.vehicle,
+                availability: store.availabilitySource.enabled,
+                betaCities: store.availabilityBetaCities,
+              ),
+            ),
           ),
         ],
       ),
@@ -139,77 +145,28 @@ class MapLegendContent extends StatelessWidget {
             ],
           ),
         ),
-        _Section(
-          heading: legendBadgesHeading,
-          note: legendBadgesNote,
-          child: _Grid(
-            key: const ValueKey('legend-badges'),
-            iconHeight: 48,
-            items: [
-              for (final badge in SpaceBadge.values)
-                (
-                  SpotMarker(look: allowed, badge: badge),
-                  badge.label,
-                  badge.look,
-                ),
-            ],
-          ),
-        ),
-        if (availability)
-          _Section(
-            key: const ValueKey('availability-legend'),
-            heading: legendCapsulesHeading,
-            note: legendCapsulesNote,
-            child: _ListRows(
-              rows: [
-                for (final (capsule, (title, detail)) in [
-                  (
-                    const AvailabilityCapsule(
-                      text: '剩 12',
-                      style: CapsuleStyle.live,
-                      semantics: '',
-                    ),
-                    capsuleLegendLive,
-                  ),
-                  (
-                    const AvailabilityCapsule(
-                      text: '已滿',
-                      style: CapsuleStyle.full,
-                      semantics: '',
-                    ),
-                    capsuleLegendFull,
-                  ),
-                  (
-                    const AvailabilityCapsule(
-                      text: '剩 12',
-                      style: CapsuleStyle.delayed,
-                      semantics: '',
-                    ),
-                    capsuleLegendDelayed,
-                  ),
-                  (
-                    const AvailabilityCapsule(
-                      text: '暫停',
-                      style: CapsuleStyle.suspended,
-                      semantics: '',
-                    ),
-                    capsuleLegendSuspended,
-                  ),
-                  // Car bays carry a count only for heavy bikes.
-                  if (vehicle == VehicleType.heavy)
-                    (
-                      const AvailabilityCapsule(
-                        text: '剩 3',
-                        style: CapsuleStyle.car,
-                        semantics: '',
-                      ),
-                      capsuleLegendCar,
-                    ),
-                ])
-                  (AvailabilityCapsuleView(capsule: capsule), title, detail),
+        // The numbers and the badges explain each other (#492): side by
+        // side where the page is wide enough (tablet), else in turn.
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final capsules = availability ? _capsules(context) : null;
+            final badges = _badges(context);
+            if (capsules == null || constraints.maxWidth < legendTwoColumns) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [?capsules, badges],
+              );
+            }
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: capsules),
+                const SizedBox(width: 28),
+                Expanded(child: badges),
               ],
-            ),
-          ),
+            );
+          },
+        ),
         if (availability && betaCities.isNotEmpty)
           _Section(
             key: const ValueKey('availability-beta-legend'),
@@ -300,6 +257,109 @@ class MapLegendContent extends StatelessWidget {
     );
   }
 }
+
+extension on MapLegendContent {
+  /// 標記上方的數字: the pills as [vehicle] sees them. Heavy bikes also
+  /// get the counts of other bays, each with its badge.
+  Widget _capsules(BuildContext context) {
+    final heavy = vehicle == VehicleType.heavy;
+    AvailabilityCapsuleView pill(
+      String text,
+      CapsuleStyle style, [
+      SpaceBadge? badge,
+    ]) => AvailabilityCapsuleView(
+      capsule: AvailabilityCapsule(
+        text: text,
+        style: style,
+        badge: badge,
+        semantics: '',
+      ),
+    );
+    return _Section(
+      key: const ValueKey('availability-legend'),
+      heading: legendCapsulesHeading,
+      note: legendCapsulesNote(vehicle),
+      child: _ListRows(
+        rows: [
+          for (final (visual, (title, detail)) in <(Widget, (String, String))>[
+            (pill('剩 12', CapsuleStyle.live), capsuleLegendLive(vehicle)),
+            if (heavy) ...[
+              (
+                pill('剩 18', CapsuleStyle.live, SpaceBadge.shared),
+                capsuleLegendShared,
+              ),
+              (
+                pill('剩 9', CapsuleStyle.live, SpaceBadge.generalHeavy),
+                capsuleLegendGeneralHeavy,
+              ),
+              (
+                pill('剩 3', CapsuleStyle.live, SpaceBadge.car),
+                capsuleLegendCar,
+              ),
+            ],
+            (
+              // The clock and a badge together, where badges appear.
+              heavy
+                  ? pill('剩 3', CapsuleStyle.delayed, SpaceBadge.car)
+                  : pill('剩 12', CapsuleStyle.delayed),
+              capsuleLegendDelayed(vehicle),
+            ),
+            (pill('已滿', CapsuleStyle.full), capsuleLegendFull),
+            (pill('暫停', CapsuleStyle.suspended), capsuleLegendSuspended),
+            (
+              const SpotMarker(look: (EligibilityStatus.allowed, null)),
+              capsuleLegendNone(vehicle),
+            ),
+          ])
+            (visual, title, detail),
+        ],
+      ),
+    );
+  }
+
+  /// 標記右下角的小圖示: the six bay kinds for every vehicle, and for
+  /// heavy bikes the ink circle in a row of its own.
+  Widget _badges(BuildContext context) {
+    const allowed = (EligibilityStatus.allowed, null);
+    final grid = _Grid(
+      key: const ValueKey('legend-badges'),
+      iconHeight: 48,
+      items: [
+        for (final badge in SpaceBadge.bayKinds)
+          (SpotMarker(look: allowed, badge: badge), badge.label, badge.look),
+      ],
+    );
+    return _Section(
+      heading: legendBadgesHeading,
+      note: legendBadgesNote(vehicle),
+      child: vehicle != VehicleType.heavy
+          ? grid
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                grid,
+                _ListRows(
+                  key: const ValueKey('legend-general-heavy'),
+                  divided: true,
+                  rows: [
+                    (
+                      const SpotMarker(
+                        look: allowed,
+                        badge: SpaceBadge.generalHeavy,
+                      ),
+                      legendGeneralHeavyBadge.$1,
+                      legendGeneralHeavyBadge.$2,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+    );
+  }
+}
+
+/// From this width the numbers and the badges sit side by side.
+const legendTwoColumns = 720.0;
 
 /// A heading over a group: the iOS inset grouped list (grey caption,
 /// white rounded card) or the Android flat section (primary title).
@@ -395,19 +455,51 @@ class _Section extends StatelessWidget {
 /// One row per item: the visual in an 84-wide column, then name and
 /// meaning. A screen reader reads the words; the visual is decoration.
 class _ListRows extends StatelessWidget {
-  const _ListRows({required this.rows});
+  const _ListRows({super.key, required this.rows, this.divided = false});
   final List<(Widget, String, String)> rows;
+
+  /// A line above the first row too: it follows other content in its
+  /// group.
+  final bool divided;
+
+  /// At about twice the text size the visual goes above the words, which
+  /// then keep the whole width and are never cut (design #492, 字級 2.0).
+  static bool stacked(BuildContext context) =>
+      MediaQuery.textScalerOf(context).scale(10) >= 17;
+
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final divider = isCupertino
         ? cu.CupertinoColors.separator.resolveFrom(context)
+        : divided
+        ? colors.outlineVariant
         : null;
+    final stack = stacked(context);
+    Widget words(String title, String detail) => Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: TextStyle(fontSize: isCupertino ? 17 : 16)),
+        if (detail.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            detail,
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.45,
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ],
+    );
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         for (final (i, (visual, title, detail)) in rows.indexed)
           Container(
-            decoration: divider != null && i > 0
+            decoration: divider != null && (i > 0 || divided)
                 ? BoxDecoration(
                     border: Border(top: BorderSide(color: divider, width: .5)),
                   )
@@ -417,11 +509,19 @@ class _ListRows extends StatelessWidget {
               vertical: 10,
             ),
             child: MergeSemantics(
-              child: Row(
+              child: Flex(
+                direction: stack ? Axis.vertical : Axis.horizontal,
+                mainAxisSize: stack ? MainAxisSize.min : MainAxisSize.max,
+                crossAxisAlignment: stack
+                    ? CrossAxisAlignment.stretch
+                    : CrossAxisAlignment.center,
                 children: [
                   SizedBox(
-                    width: 84,
-                    child: Center(
+                    width: stack ? null : 84,
+                    child: Align(
+                      alignment: stack
+                          ? AlignmentDirectional.centerStart
+                          : Alignment.center,
                       // A wide pill (large text, long count) shrinks rather
                       // than overflow the column.
                       child: FittedBox(
@@ -430,29 +530,11 @@ class _ListRows extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: TextStyle(fontSize: isCupertino ? 17 : 16),
-                        ),
-                        if (detail.isNotEmpty) ...[
-                          const SizedBox(height: 2),
-                          Text(
-                            detail,
-                            style: TextStyle(
-                              fontSize: 13,
-                              height: 1.45,
-                              color: colors.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
+                  SizedBox(width: stack ? 0 : 12, height: stack ? 8 : 0),
+                  if (stack)
+                    words(title, detail)
+                  else
+                    Expanded(child: words(title, detail)),
                 ],
               ),
             ),

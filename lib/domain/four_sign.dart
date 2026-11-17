@@ -22,9 +22,10 @@ import '../models/zone_entries.dart';
 import 'availability_display.dart'
     show
         availabilityVehicle,
-        explicitlyShared,
+        BorrowedBays,
+        borrowedBays,
+        lendsScooterCount,
         heavyCarOpen,
-        motorcycleBaysAllShared,
         sharedBeatsCar,
         sharedScooterCount;
 import 'eligibility.dart';
@@ -288,14 +289,18 @@ class SeatAnswer {
     this.besideArea,
     this.disagrees = false,
     this.lapsed,
-    this.shared = false,
+    this.borrowed,
   });
   final SeatKind kind;
 
-  /// The count is the scooter count heavy bikes read on 普大共用格 (A',
-  /// [motorcycleBaysAllShared]): scooters park there too, so it is shown
-  /// marked 「普大共用」.
-  final bool shared;
+  /// What the count stands for when it is the scooter count heavy bikes
+  /// read (A', #493, [borrowedBays]): scooters park there too, so it is
+  /// shown marked 「普大共用」 or 「一般機車格可停」; null for a count of
+  /// the vehicle's own.
+  final BorrowedBays? borrowed;
+
+  /// Whether the count is a borrowed scooter count.
+  bool get shared => borrowed != null;
 
   /// The places the number is about (a shared count names several).
   final List<SignArea> areas;
@@ -684,14 +689,14 @@ BayKind? _zoneBay(ParkingZone z) => bayKindOf(_zoneCondition(z));
 ///
 /// A heavy bike on motorcycle bays has no count of its own (#222): the
 /// scooter count never stands for heavy-only bays, car bays, or motorcycle
-/// bays heavy bikes may not use. The one exception (A', 2026-11-15): on a
-/// zone whose condition states 普大共用 ([explicitlyShared]; never a
-/// legacy access alone) of a lot whose motorcycle bays are all 普大共用
-/// ([allShared], [motorcycleBaysAllShared]), the scooter count is those
-/// shared bays' count, read as such ([sharedScooterCount]), while every
-/// shared zone is open to heavy bikes now (the count covers them all). A
-/// lot that also has scooter-only motorcycle bays keeps none on its shared
-/// zones.
+/// bays heavy bikes may not use. The one exception (A', 2026-11-15; #493):
+/// on a zone whose condition states 普大共用 or plain 一般機車格 open to
+/// heavy bikes ([lendsScooterCount]; never a legacy access alone) of a lot
+/// whose motorcycle bays all are such ([allShared], [borrowedBays]), the
+/// scooter count is those bays' count, read as such
+/// ([sharedScooterCount]), while every such zone is open to heavy bikes
+/// now (the count covers them all). A lot that also has scooter-only
+/// motorcycle bays keeps none on these zones.
 AvailabilityVehicle? _countClass(
   ParkingZone z,
   VehicleType vehicle, {
@@ -700,7 +705,7 @@ AvailabilityVehicle? _countClass(
   (VehicleType.heavy, Bay.heavy) => AvailabilityVehicle.heavy,
   (VehicleType.heavy, Bay.car) => AvailabilityVehicle.car,
   (VehicleType.heavy, Bay.motorcycle)
-      when allShared && explicitlyShared(z.condition) =>
+      when allShared && lendsScooterCount(z.condition) =>
     AvailabilityVehicle.scooter,
   (VehicleType.scooter, Bay.motorcycle) => AvailabilityVehicle.scooter,
   _ => null,
@@ -742,10 +747,10 @@ List<SignArea> _lotAreas(
     // The scooter count covers every shared zone: heavy bikes read it only
     // while each of them is open to them now (A').
     final allShared =
-        motorcycleBaysAllShared(spot) &&
+        borrowedBays(spot) != null &&
         [
           for (final (i, zone) in spot.zones.indexed)
-            if (explicitlyShared(zone.condition)) windows[i].now,
+            if (lendsScooterCount(zone.condition)) windows[i].now,
         ].every((open) => open);
     return [
       for (final (i, z) in zones.indexed)
@@ -1034,7 +1039,7 @@ SeatAnswer _seat(
       // count, after their own (below), only while the lot is open to them
       // now (places may be the lot open later, when nothing is open now).
       if (vehicle == VehicleType.heavy &&
-          motorcycleBaysAllShared(spot) &&
+          borrowedBays(spot) != null &&
           places.every((a) => a.window.now)) {
         groups[AvailabilityVehicle.scooter] = const [];
       }
@@ -1149,7 +1154,7 @@ SeatAnswer _seat(
       available: best.$1.available,
       total: best.$1.capacity,
       at: best.$1.sourceUpdatedAt,
-      shared: borrowed(best),
+      borrowed: borrowed(best) ? borrowedBays(spot) : null,
       more: more,
       beside: beside?.$2,
       besideArea: beside?.$1,
