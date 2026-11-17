@@ -615,6 +615,22 @@ class ImportedDataTest(unittest.TestCase):
                 self.assertLessEqual(len(s.get("address", "")), 200)
                 self.check_common(s)
 
+    def test_official_spots_carry_only_the_listed_pilot_sites(self):
+        """The committed file was built before #501: 12 lots that only share a fragment with a pilot name were fixed by hand."""
+        spots = json.loads(OFFICIAL_DATA.read_text())
+        by_source = {s["source_id"]: s for s in spots}
+        self.assertEqual(sum(s.get("special_rules") == PILOT_RULES for s in spots), len(TAIPEI_PILOT))
+        # No motorcycle bays and no pilot: official_additions no longer adds these.
+        for source_id in ("TPE0225", "TPE0342", "TPE0351", "TPE0853", "TPE0900",
+                          "TPE1372", "TPE1379", "TPE1552", "TPE1617", "TPE1662"):
+            self.assertNotIn(source_id, by_source)
+        for source_id in ("TPE1000", "TPE1871"):
+            with self.subTest(spot=source_id):
+                spot = by_source[source_id]
+                self.assertNotIn("scooterHeavy", [zone.get("access") for zone in spot.get("parking_zones", [])])
+                self.assertNotIn("special_rules", spot)
+                self.assertIsNone(spot["heavy_allowed"])
+
 
 if __name__ == "__main__":
     unittest.main()
