@@ -72,6 +72,14 @@ TAIPEI_PILOT = {
     "民有市場地下停車場": PER_HOUR_40, "松山工農地下停車場": PER_HOUR_40, "忠信地下停車場": PER_HOUR_40,
     "玉成公園地下停車場": PER_ENTRY, "南港機廠1區社會住宅地下停車場": PER_ENTRY, "青年公園高爾夫球場地下停車場": PER_ENTRY,
 }
+# 試辦名單場站的其他寫法 → 名單名稱（#500）：停管處資料集名稱與名單不同的
+# 忠信廣場（TPE0230）、南港機廠1區（TPE1898），以及第一批附件表格的簡寫「捷運劍潭站橋下機車」（TPE0512），
+# 都依行政區與地址逐一對應。只認名單全名與這些別名，不用子字串或相似度：「八德立體」不是「八德路停車場」（#494 誤配 12 點）。
+TAIPEI_PILOT_ALIASES = {
+    "忠信廣場地下停車場": "忠信地下停車場",
+    "南港機廠1區社會住宅停車場": "南港機廠1區社會住宅地下停車場",
+    "捷運劍潭站橋下機車": "捷運劍潭站橋下機車停車場",
+}
 PILOT_RULES = "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準"
 # 115/10/6 起臺北市公有路邊收費機車格全面開放大型重機停放；費率依路段收費方式而不同。
 TAIPEI_ROADSIDE = ("大型重機依路段收費方式：計次每次 40 元；計時每小時 20 元、當日上限 100 元；限時格首 20 分鐘 0 元"
@@ -659,12 +667,20 @@ def apply_official(spot, lot, meters, score, source_name):
     return {"official_id": lot["id"], "official_name": lot["name"], "distance_m": None if meters is None else round(meters), "name_score": round(score, 2), "changes": changes}
 
 
+def pilot_key(name):
+    return re.sub(r"\s+", "", name).replace("台", "臺")
+
+
+PILOT_NAMES = {pilot_key(pilot): pilot for pilot in TAIPEI_PILOT} \
+    | {pilot_key(alias): pilot for alias, pilot in TAIPEI_PILOT_ALIASES.items()}
+
+
 def pilot_name(*names):
-    """Pilot lists shorten some names (忠信 for 忠信廣場), so a contained core also counts."""
+    """The pilot site a name is, by its full name or a listed alias (TAIPEI_PILOT_ALIASES).
+    A shared fragment is no match: 八德立體 is not 八德路, 福林公園 is not its coach lot (#500)."""
     for name in filter(None, names):
-        for pilot in TAIPEI_PILOT:
-            if similarity(name, pilot) >= 0.8 or (len(core(pilot)) >= 2 and core(pilot) in core(name)):
-                return pilot
+        if pilot := PILOT_NAMES.get(pilot_key(name)):
+            return pilot
     return None
 
 
@@ -810,8 +826,8 @@ def build(kml, mid, cache, imported_on, refresh=False, tdx_env=None):
     # Pilot sites come from 停管處 data; empty when it failed, and the report records why.
     taipei = [lot for lot in lots.get("臺北市", []) if lot["source"] == OFFICIAL["臺北市"][0]]
     for pilot in TAIPEI_PILOT if taipei else ():
-        lot = max(taipei, key=lambda lot: similarity(pilot, lot["name"]))
-        if pilot in found or similarity(pilot, lot["name"]) < 0.8:
+        lot = next((lot for lot in taipei if pilot_name(lot["name"]) == pilot), None)
+        if pilot in found or lot is None:
             continue
         nearby = [s for s in spots if s["city"] == "臺北市" and s["space_type"] == "offStreet"
                   and distance(s["lat"], s["lng"], lot["lat"], lot["lng"]) <= 150 and similarity(s["name"], pilot) >= 0.4]
