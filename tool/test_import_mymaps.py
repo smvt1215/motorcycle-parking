@@ -15,7 +15,7 @@ from unittest.mock import patch
 from import_mymaps import (
     PILOT_RULES, TAIPEI_PILOT, TDX_SOURCE, TAIPEI_ROADSIDE, apply_official, apply_taipei_rules, cell, clean_text, display_name,
     entry_direction, facility_key, importable, lot, locate, match_lot, merge, hccg_context, kaohsiung, midpoint, normalize,
-    official_additions, official_lots, official_spot, parse_fee, split_name, taichung_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
+    official_additions, official_lots, official_spot, parse_fee, pilot_name, split_name, taichung_name, tdx_credentials, tdx_lots, tm2_to_wgs84,
     unimportable,
 )
 
@@ -185,6 +185,57 @@ class OfficialTest(unittest.TestCase):
         roadside = {"name": "三重路 普大共用機車格", "space_type": "paidMotorcycle", "fee_note": "請依現場公告"}
         apply_taipei_rules(roadside)
         self.assertEqual(roadside["fee_note"], TAIPEI_ROADSIDE[0])
+
+    # 停管處資料集（TCMSV_alldesc.json）裡名列兩批試辦名單的 36 場，以及 #494 查證誤配的 12 場（#500）。
+    PILOT_LOTS = {
+        "TPE0051": "八德立體停車場", "TPE0095": "大安森林公園地下停車場", "TPE0230": "忠信廣場地下停車場",
+        "TPE0239": "建成國中地下停車場", "TPE0305": "青年公園高爾夫球場地下停車場", "TPE0334": "信義廣場地下停車場",
+        "TPE0360": "東湖國小地下停車場", "TPE0425": "永盛公園地下停車場", "TPE0449": "龍門國中地下停車場",
+        "TPE0450": "艋舺公園地下停車場", "TPE0512": "捷運劍潭站橋下機車停車場", "TPE0513": "捷運士林站橋下機車停車場",
+        "TPE0534": "民有市場地下停車場", "TPE0535": "濱江國中地下停車場", "TPE0606": "長安國小地下停車場",
+        "TPE0680": "七星公園地下停車場", "TPE0716": "景美國小地下停車場", "TPE0722": "玉成國小地下停車場",
+        "TPE0775": "玉成公園地下停車場", "TPE0827": "世貿公園地下停車場", "TPE0835": "萬興國小地下停車場",
+        "TPE0848": "松山工農地下停車場", "TPE0852": "福林公園地下停車場", "TPE0876": "行一機車臨時平面停車場",
+        "TPE0884": "松山國小地下停車場", "TPE0926": "嘉興公園地下停車場", "TPE0930": "啟聰學校地下停車場",
+        "TPE1027": "振興公園地下停車場", "TPE1515": "行善社會住宅地下停車場", "TPE1519": "廣慈衛福大樓地下停車場",
+        "TPE1589": "景美女中地下停車場", "TPE1769": "青年二期社會住宅地下停車場", "TPE1847": "平陽街機車臨時平面停車場",
+        "TPE1889": "福星公園地下停車場", "TPE1897": "樂活公園地下停車場", "TPE1898": "南港機廠1區社會住宅停車場",
+    }
+    NOT_PILOT_LOTS = {
+        "TPE0225": "嘟嘟房八德站停車場", "TPE0342": "台灣聯通八德停車場", "TPE0351": "八德路監理所站",
+        "TPE0853": "福林公園大客車平面停車場", "TPE0900": "八德路停車場", "TPE1000": "嘟嘟房龍江八德站停車場",
+        "TPE1372": "叭叭房八德大樓地下停車場", "TPE1379": "臺北市立啟聰學校忠區停車場", "TPE1552": "Times八德路三段",
+        "TPE1617": "便利停車場八德站", "TPE1662": "良友八德停車場", "TPE1871": "八德路2段臨時平面停車場",
+    }
+
+    def test_every_listed_pilot_lot_is_found_once(self):
+        found = {}
+        for source_id, name in self.PILOT_LOTS.items():
+            with self.subTest(lot=source_id):
+                self.assertIn(pilot_name(name), TAIPEI_PILOT)
+                found.setdefault(pilot_name(name), []).append(source_id)
+        self.assertEqual(set(found), set(TAIPEI_PILOT))
+        self.assertTrue(all(len(ids) == 1 for ids in found.values()), found)
+        self.assertEqual(pilot_name("忠信廣場地下停車場"), "忠信地下停車場")
+        self.assertEqual(pilot_name("南港機廠1區社會住宅停車場"), "南港機廠1區社會住宅地下停車場")
+        self.assertEqual(pilot_name("捷運劍潭站橋下機車"), "捷運劍潭站橋下機車停車場")
+        self.assertEqual(pilot_name(" 八德立體 停車場"), "八德立體停車場")
+
+    def test_a_lot_sharing_part_of_a_pilot_name_is_no_pilot(self):
+        for source_id, name in self.NOT_PILOT_LOTS.items():
+            with self.subTest(lot=source_id):
+                self.assertIsNone(pilot_name(name))
+                spot = {"name": name, "space_type": "offStreet", "heavy_allowed": None, "parking_zones": [], "special_rules": ""}
+                self.assertEqual(apply_taipei_rules(spot), (None, []))
+                self.assertEqual((spot["parking_zones"], spot["special_rules"]), ([], ""))
+        self.assertIsNone(pilot_name("八德", "忠信", "福林公園", "啟聰學校"))
+
+    def test_a_carless_lot_sharing_part_of_a_pilot_name_is_not_added(self):
+        source = import_mymaps.OFFICIAL["臺北市"][0]
+        rows = [lot(source_id, name, 25.05, 121.55 + n / 100) | {"source": source}
+                for n, (source_id, name) in enumerate([("TPE0051", "八德立體停車場"), ("TPE0225", "嘟嘟房八德站停車場")])]
+        self.assertEqual([(row["id"], pilot) for row, pilot in official_additions({"臺北市": rows}, set())],
+                         [("TPE0051", "八德立體停車場")])
 
     def test_merge_treats_unknown_as_missing_not_conflict(self):
         def spot(heavy, zone):
