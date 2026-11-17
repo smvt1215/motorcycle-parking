@@ -12845,38 +12845,6 @@
     "source_id": "TPE0209"
   },
   {
-    "id": "official:c1d98743-8429-5071-81e9-4198f6b1f480",
-    "name": "嘟嘟房八德站停車場",
-    "lat": 25.0488922,
-    "lng": 121.563597,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "小型車：月租 全日12,000元",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市松山區八德路4段195號",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0225"
-  },
-  {
     "id": "official:b5764c73-cdca-5296-8347-8285f968777c",
     "name": "松隆平面停車場",
     "lat": 25.0483262,
@@ -13277,38 +13245,6 @@
     "source_id": "TPE0316"
   },
   {
-    "id": "official:16f04607-74ac-5642-a3e7-09b773fba74e",
-    "name": "台灣聯通八德停車場",
-    "lat": 25.0498689,
-    "lng": 121.5642119,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時:80元/時，停車未滿1小時以1小時計，逾1小時以上者，未滿半小時以半小時計。月租:全天8,000元/月，日間7,000元/月(08-20)，夜間6,000元/月(20-08)。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市松山區八德路4段245巷32弄9號",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0342"
-  },
-  {
     "id": "official:bfcc4e65-eaf1-5fea-ba8d-68b62a5b9e7f",
     "name": "便利停車場建國站(中山大同保管場)",
     "lat": 25.0535444,
@@ -13331,38 +13267,6 @@
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版",
     "source_id": "TPE0350"
-  },
-  {
-    "id": "official:e9e4f937-ec2d-5bde-bdbe-a2eaa0906c6c",
-    "name": "八德路監理所站",
-    "lat": 25.0481731,
-    "lng": 121.5589803,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時：小型車100元/時，停車未滿1小時以1小時計，逾1小時以上，未滿半小時以半小時計。月租：小型車全日12,000元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市松山區八德路4段32號停車塔(車位編號1至32及41至72號)",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0351"
   },
   {
     "id": "official:b152c435-670d-5ea8-9d2d-3f4a215a85c2",
@@ -15261,39 +15165,6 @@
     "source_id": "TPE0847"
   },
   {
-    "id": "official:724baf46-0063-5af0-80aa-a39d35f0eab2",
-    "name": "福林公園大客車平面停車場",
-    "lat": 25.0956756,
-    "lng": 121.5295199,
-    "city": "臺北市",
-    "district": "士林區",
-    "source": "official",
-    "space_type": "offStreet",
-    "facility_type": "surface",
-    "fee_note": "小型車：計時 60元/時(08時~22時)，20元/時(22時~08時)，停車全程以半小時計，本時段收費上限100元，本場未出售月票。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市士林區中正路17號空地",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計次40元，隔日另計"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0853"
-  },
-  {
     "id": "official:e7d9e076-af18-5a06-ba13-25c88a866420",
     "name": "通河西街一段堤外平面停車場",
     "lat": 25.0837027,
@@ -15513,38 +15384,6 @@
     "source_id": "TPE0897"
   },
   {
-    "id": "official:0f79188c-39e0-5385-a421-c724fc309a2a",
-    "name": "八德路停車場",
-    "lat": 25.0468772,
-    "lng": 121.5397728,
-    "city": "臺北市",
-    "district": "中山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時：小型車80元/時，停車全程以半小時計。月租：小型車全日6,000元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市中山區八德路2段203號地下1、4層",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE0900"
-  },
-  {
     "id": "official:ad8e02d0-aee7-5ec8-b490-7deda320544e",
     "name": "168停車聯盟-德明研推場",
     "lat": 25.0868461,
@@ -15749,7 +15588,7 @@
     "source": "official",
     "space_type": "offStreet",
     "fee_note": "計時：小型車80元/時，停車全程以半小時計。計次：機車20元/次，隔日另計，以00時為基準。月租：小型車全日8,000元/月，機車全日500元/月。",
-    "heavy_allowed": true,
+    "heavy_allowed": null,
     "scooter_allowed": true,
     "status": "confirmed",
     "scooter_total": 183,
@@ -15758,14 +15597,6 @@
     "last_confirmed_at": "2026-10-17T00:00:00Z",
     "note": "",
     "address": "臺北市中山區龍江路15號地下1至2層",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版",
@@ -16865,71 +16696,6 @@
     "source_id": "TPE1365"
   },
   {
-    "id": "official:db2a2596-1b1c-54bb-88aa-124354dc02d8",
-    "name": "叭叭房八德大樓地下停車場",
-    "lat": 25.0499282,
-    "lng": 121.5593768,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "facility_type": "underground",
-    "fee_note": "月租：小型車全日10,000元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市松山區光復北路11巷33號地下3至4層",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE1372"
-  },
-  {
-    "id": "official:3a17e864-de8e-55cb-b21a-83fb68a967fd",
-    "name": "臺北市立啟聰學校忠區停車場",
-    "lat": 25.0747306,
-    "lng": 121.5134724,
-    "city": "臺北市",
-    "district": "大同區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "全日4,800元/月，以半年為一期計費，半年優惠每車每期18,000元。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市大同區重慶北路3段320號",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計次40元，隔日另計"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE1379"
-  },
-  {
     "id": "official:f2d7db89-d025-5d47-a0bf-44bd6d827809",
     "name": "新奇岩社會住宅地下停車場",
     "lat": 25.1232636,
@@ -17719,38 +17485,6 @@
     "source_id": "TPE1550"
   },
   {
-    "id": "official:b355e73f-9bb1-5208-a3a3-7a8f77760577",
-    "name": "Times八德路三段",
-    "lat": 25.0460601,
-    "lng": 121.549838,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時：200元/時，停車未滿1小時以1小時計，逾1小時以上者，未滿半小時以半小時計。月租：10,000元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市松山區八德路3段12巷52弄15號旁",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE1552"
-  },
-  {
     "id": "official:edca7c39-666f-5794-8f3b-c4794d64158c",
     "name": "公園首席停車場",
     "lat": 25.0594232,
@@ -17948,38 +17682,6 @@
     "source_id": "TPE1606"
   },
   {
-    "id": "official:dd1bfd3a-b01d-5235-9ebb-9ef0ec478adf",
-    "name": "便利停車場八德站",
-    "lat": 25.0480895,
-    "lng": 121.5612259,
-    "city": "臺北市",
-    "district": "松山區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時：小型車50元/時，當日單次停車最高收費上限300元/日，隔日另計，以00時為基準，停車全程以半小時計。月租：小型車全日8,000元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市松山區八德路4段106巷3號旁空地",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE1617"
-  },
-  {
     "id": "official:2f813098-d8eb-5a66-aac5-4f6a3ca81766",
     "name": "松山車站機車停車場",
     "lat": 25.0483022,
@@ -18174,38 +17876,6 @@
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版",
     "source_id": "TPE1659"
-  },
-  {
-    "id": "official:53657f32-d260-5bf1-91f1-1eef0424a14d",
-    "name": "良友八德停車場",
-    "lat": 25.0430505,
-    "lng": 121.5310125,
-    "city": "臺北市",
-    "district": "中正區",
-    "source": "official",
-    "space_type": "offStreet",
-    "fee_note": "計時：小型車100元/時，停車未滿1小時以1小時計，逾1小時以上，未滿半小時以半小時計。月租：小型車全日10,000元/月。",
-    "heavy_allowed": true,
-    "scooter_allowed": null,
-    "status": "confirmed",
-    "scooter_total": null,
-    "available": null,
-    "updated_at": "2026-10-17T00:00:00Z",
-    "last_confirmed_at": "2026-10-17T00:00:00Z",
-    "note": "",
-    "address": "臺北市中正區忠孝東路2段95號",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
-    "source_name": "臺北市政府",
-    "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
-    "license_note": "政府資料開放授權條款第 1 版",
-    "source_id": "TPE1662"
   },
   {
     "id": "official:6448df0b-c80b-5d37-896c-876e540c34bd",
@@ -18967,7 +18637,7 @@
     "space_type": "offStreet",
     "facility_type": "surface",
     "fee_note": "計時：小型車40元/時，停車全程以半小時計。計次：機車20元/次，隔日另計，以00時為基準。",
-    "heavy_allowed": true,
+    "heavy_allowed": null,
     "scooter_allowed": true,
     "status": "confirmed",
     "scooter_total": 12,
@@ -18976,14 +18646,6 @@
     "last_confirmed_at": "2026-10-17T00:00:00Z",
     "note": "",
     "address": "臺北市大安區八德路2段31號旁",
-    "special_rules": "臺北市路外停車場試辦大型重機停放機車區（各期 6 個月）：依現場標誌斜停，最多 2 格機車格；停汽車區依小型車費率。試辦是否延續請以現場公告為準",
-    "parking_zones": [
-      {
-        "name": "機車區",
-        "access": "scooterHeavy",
-        "fee_note": "大型重機計時20元（當日當次上限40元）"
-      }
-    ],
     "source_name": "臺北市政府",
     "source_url": "https://tcgbusfs.blob.core.windows.net/blobtcmsv/TCMSV_alldesc.json",
     "license_note": "政府資料開放授權條款第 1 版",

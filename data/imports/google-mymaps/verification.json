@@ -11503,17 +11503,6 @@
     "changes": []
   },
   {
-    "id": "official:c1d98743-8429-5071-81e9-4198f6b1f480",
-    "city": "臺北市",
-    "district": "松山區",
-    "result": "官方點（官方補入）",
-    "official_name": "嘟嘟房八德站停車場",
-    "official_id": "TPE0225",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
     "id": "official:b5764c73-cdca-5296-8347-8285f968777c",
     "city": "臺北市",
     "district": "信義區",
@@ -11690,34 +11679,12 @@
     "changes": []
   },
   {
-    "id": "official:16f04607-74ac-5642-a3e7-09b773fba74e",
-    "city": "臺北市",
-    "district": "松山區",
-    "result": "官方點（官方補入）",
-    "official_name": "台灣聯通八德停車場",
-    "official_id": "TPE0342",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
     "id": "official:bfcc4e65-eaf1-5fea-ba8d-68b62a5b9e7f",
     "city": "臺北市",
     "district": "中山區",
     "result": "官方點（官方補入）",
     "official_name": "便利停車場建國站(中山大同保管場)",
     "official_id": "TPE0350",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
-    "id": "official:e9e4f937-ec2d-5bde-bdbe-a2eaa0906c6c",
-    "city": "臺北市",
-    "district": "松山區",
-    "result": "官方點（官方補入）",
-    "official_name": "八德路監理所站",
-    "official_id": "TPE0351",
     "distance_m": 0,
     "name_score": 1.0,
     "changes": []
@@ -12559,17 +12526,6 @@
     "changes": []
   },
   {
-    "id": "official:724baf46-0063-5af0-80aa-a39d35f0eab2",
-    "city": "臺北市",
-    "district": "士林區",
-    "result": "官方點（官方補入）",
-    "official_name": "福林公園大客車平面停車場",
-    "official_id": "TPE0853",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
     "id": "official:e7d9e076-af18-5a06-ba13-25c88a866420",
     "city": "臺北市",
     "district": "士林區",
@@ -12664,17 +12620,6 @@
     "result": "官方點（官方補入）",
     "official_name": "華山停車場",
     "official_id": "TPE0897",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
-    "id": "official:0f79188c-39e0-5385-a421-c724fc309a2a",
-    "city": "臺北市",
-    "district": "中山區",
-    "result": "官方點（官方補入）",
-    "official_name": "八德路停車場",
-    "official_id": "TPE0900",
     "distance_m": 0,
     "name_score": 1.0,
     "changes": []
@@ -13252,28 +13197,6 @@
     "changes": []
   },
   {
-    "id": "official:db2a2596-1b1c-54bb-88aa-124354dc02d8",
-    "city": "臺北市",
-    "district": "松山區",
-    "result": "官方點（官方補入）",
-    "official_name": "叭叭房八德大樓地下停車場",
-    "official_id": "TPE1372",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
-    "id": "official:3a17e864-de8e-55cb-b21a-83fb68a967fd",
-    "city": "臺北市",
-    "district": "大同區",
-    "result": "官方點（官方補入）",
-    "official_name": "臺北市立啟聰學校忠區停車場",
-    "official_id": "TPE1379",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
     "id": "official:f2d7db89-d025-5d47-a0bf-44bd6d827809",
     "city": "臺北市",
     "district": "北投區",
@@ -13604,17 +13527,6 @@
     "changes": []
   },
   {
-    "id": "official:b355e73f-9bb1-5208-a3a3-7a8f77760577",
-    "city": "臺北市",
-    "district": "松山區",
-    "result": "官方點（官方補入）",
-    "official_name": "Times八德路三段",
-    "official_id": "TPE1552",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
     "id": "official:edca7c39-666f-5794-8f3b-c4794d64158c",
     "city": "臺北市",
     "district": "大同區",
@@ -13703,17 +13615,6 @@
     "changes": []
   },
   {
-    "id": "official:dd1bfd3a-b01d-5235-9ebb-9ef0ec478adf",
-    "city": "臺北市",
-    "district": "松山區",
-    "result": "官方點（官方補入）",
-    "official_name": "便利停車場八德站",
-    "official_id": "TPE1617",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
     "id": "official:2f813098-d8eb-5a66-aac5-4f6a3ca81766",
     "city": "臺北市",
     "district": "信義區",
@@ -13797,17 +13698,6 @@
     "result": "官方點（官方補入）",
     "official_name": "璞初停車股份有限公司蒔璞案",
     "official_id": "TPE1659",
-    "distance_m": 0,
-    "name_score": 1.0,
-    "changes": []
-  },
-  {
-    "id": "official:53657f32-d260-5bf1-91f1-1eef0424a14d",
-    "city": "臺北市",
-    "district": "中正區",
-    "result": "官方點（官方補入）",
-    "official_name": "良友八德停車場",
-    "official_id": "TPE1662",
     "distance_m": 0,
     "name_score": 1.0,
     "changes": []
