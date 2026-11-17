@@ -2,13 +2,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:motorcycle_parking/admin/admin_app.dart';
 import 'package:motorcycle_parking/admin/admin_controller.dart';
+import 'package:motorcycle_parking/admin/review/review_controller.dart';
 import 'package:motorcycle_parking/admin/review/review_models.dart';
 import 'package:motorcycle_parking/admin/review/shared_plan_dialog.dart';
 import 'package:motorcycle_parking/admin/spots/lot_models.dart';
 import 'package:motorcycle_parking/admin/spots/spot_models.dart';
 import 'package:motorcycle_parking/admin/spots/spots_controller.dart';
 import 'package:motorcycle_parking/models/fee.dart';
+import 'package:motorcycle_parking/models/parking.dart';
 import 'package:motorcycle_parking/models/parking_condition.dart';
+import 'package:motorcycle_parking/models/space_kind.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'fake_admin_gateway.dart';
@@ -165,6 +168,236 @@ void main() {
       expect((edited['condition'] as Map)['basis'], {'source_url': 'h'});
     });
 
+    group('只有舊 access 的分區（#494）', () {
+      const legacy = {
+        'name': '機車區',
+        'access': 'scooterHeavy',
+        'fee_plan': 'p1',
+        'fee': scooterHourly,
+      };
+      // The bay pill as the form writes it (lot_editor.dart _BayRow).
+      ParkingCondition pick(
+        ParkingCondition c, {
+        Bay? bay,
+        bool? share,
+        Charge? charge,
+      }) => ParkingCondition(
+        bay: bay ?? c.bay,
+        use: share == null
+            ? c.use
+            : share
+            ? BayUse.share
+            : BayUse.usual,
+        share: share == true ? ShareKind.scooterHeavy : c.share,
+        charge: charge ?? c.charge,
+        limits: c.limits,
+        schedule: c.schedule,
+        basis: c.basis,
+        allow: c.allow,
+      );
+
+      test('起始值只有誰能停，格位與共用未確認', () {
+        final start = zoneCondition(legacy);
+        expect(start.toJson(), {
+          'allow': {'scooter': true, 'heavy': true},
+        });
+        expect(start.bay, isNull);
+        expect(start.share, isNull);
+        // The table everything else reads stays as it was.
+        expect(zoneConditionOf(ParkingAccess.scooterHeavy)?.share, isNotNull);
+      });
+
+      test('補依據或收費：access 不變、不寫格位與共用，存檔要先選格位', () {
+        final based = zoneWithBasis(
+          {...legacy},
+          {'source_url': 'https://example.test/n'},
+        );
+        expect(based['access'], 'scooterHeavy');
+        expect(based['condition'], {
+          'allow': {'scooter': true, 'heavy': true},
+          'basis': {'source_url': 'https://example.test/n'},
+        });
+        expect(zoneProblem(based), contains('請先選格位種類'));
+        expect(zoneProblem(based), contains('普大共用'));
+        final charged = zoneWithCondition({
+          ...legacy,
+        }, pick(zoneCondition(legacy), charge: Charge.toll));
+        expect(charged['access'], 'scooterHeavy');
+        expect((charged['condition'] as Map).keys, {'charge', 'allow'});
+        expect(zoneProblem(charged), contains('請先選格位種類'));
+        // 未確認 picked again for the bay changes nothing either.
+        final unknown = zoneWithCondition(based, zoneCondition(based));
+        expect(unknown['access'], 'scooterHeavy');
+        expect(zoneProblem(unknown), contains('請先選格位種類'));
+        // A basis typed halfway names the link first, then asks for the bay.
+        var half = zoneWithBasis({...legacy}, {'source_url': 'h'});
+        expect(half['access'], 'scooterHeavy');
+        expect(zoneProblem(half), contains('https://'));
+        half = zoneWithBasis(half, {'source_url': 'https://example.test/n'});
+        expect(zoneProblem(half), contains('請先選格位種類'));
+        // Taking the edit back leaves the zone as it was stored.
+        expect(zoneWithBasis(based, null), legacy);
+        expect(
+          zoneWithCondition(charged, zoneCondition(legacy)),
+          legacy,
+          reason: '收費改回未確認',
+        );
+      });
+
+      test('condition 明寫 null 的也一樣先選格位', () {
+        final based = zoneWithBasis(
+          {...legacy, 'condition': null},
+          {'source_url': 'https://example.test/n'},
+        );
+        expect(based['access'], 'scooterHeavy');
+        expect((based['condition'] as Map).containsKey('bay'), isFalse);
+        expect(zoneProblem(based), contains('請先選格位種類'));
+        expect(
+          unpickedBayProblem(
+            [
+              {...legacy, 'condition': null},
+            ],
+            [
+              {
+                ...legacy,
+                'condition': {
+                  'allow': {'scooter': true, 'heavy': true},
+                },
+              }..remove('access'),
+            ],
+          ),
+          contains('請先選格位種類'),
+        );
+      });
+
+      test('選了機車格才寫格位；選了普大共用才寫 share', () {
+        final based = zoneWithBasis(
+          {...legacy},
+          {'source_url': 'https://example.test/n'},
+        );
+        final bay = zoneWithCondition(
+          based,
+          pick(zoneCondition(based), bay: Bay.motorcycle),
+        );
+        expect(bay['access'], 'scooterHeavy');
+        expect(bay['condition'], {
+          'bay': 'motorcycle',
+          'allow': {'scooter': true, 'heavy': true},
+          'basis': {'source_url': 'https://example.test/n'},
+        });
+        expect(zoneProblem(bay), isNull);
+        expect(zoneConditionConsistent(bay.cast()), isTrue);
+        final usual = zoneWithCondition(
+          bay,
+          pick(zoneCondition(bay), share: false),
+        );
+        expect((usual['condition'] as Map)['use'], 'usual');
+        expect((usual['condition'] as Map).containsKey('share'), isFalse);
+        final shared = zoneWithCondition(
+          bay,
+          pick(zoneCondition(bay), share: true),
+        );
+        expect((shared['condition'] as Map)['share'], 'scooter_heavy');
+        expect(shared['access'], 'scooterHeavy');
+        expect(zoneProblem(shared), isNull);
+        // A heavy bay from scooterHeavy: scooters out, access follows.
+        final heavy = zoneWithCondition(
+          based,
+          ParkingCondition(
+            bay: Bay.heavy,
+            basis: zoneCondition(based).basis,
+            allow: const ZoneAllow(scooter: false, heavy: true),
+          ),
+        );
+        expect(heavy['access'], 'heavyOnly');
+        expect(zoneProblem(heavy), isNull);
+      });
+
+      test('其他舊 access 照舊預填，補依據照存', () {
+        for (final access in [
+          ParkingAccess.scooterOnly,
+          ParkingAccess.heavyCar,
+          ParkingAccess.heavyOnly,
+          ParkingAccess.noMotorcycle,
+        ]) {
+          final zone = {'name': 'A', 'access': access.name};
+          expect(
+            zoneCondition(zone),
+            zoneConditionOf(access),
+            reason: access.name,
+          );
+          final based = zoneWithBasis(
+            {...zone},
+            {'source_url': 'https://example.test/n'},
+          );
+          expect(based['access'], access.name, reason: access.name);
+          expect(zoneProblem(based), isNull, reason: access.name);
+          expect(zoneConditionConsistent(based.cast()), isTrue);
+          // 未確認 picked for the bay: the access goes, as before (#190).
+          final unknown = zoneWithCondition(
+            based,
+            ParkingCondition(
+              basis: zoneCondition(based).basis,
+              allow: zoneCondition(based).allow,
+            ),
+          );
+          expect(zoneProblem(unknown), isNull, reason: access.name);
+        }
+      });
+
+      test('選計費規則不寫 condition', () {
+        final z = zoneWithPlan({...legacy}, 'p2', [...plans]);
+        expect(z.containsKey('condition'), isFalse);
+        expect(z['access'], 'scooterHeavy');
+        expect(zoneProblem(z), isNull);
+        expect(
+          zonesFollowingPlans([z], [...plans]).single.containsKey('condition'),
+          isFalse,
+        );
+      });
+
+      test('本來就有 condition 的分區照舊', () {
+        // Without a bay and without an access: saved as before.
+        const open = {
+          'name': 'C',
+          'condition': {
+            'allow': {'scooter': true, 'heavy': true},
+          },
+        };
+        final based = zoneWithBasis(
+          {...open},
+          {'source_url': 'https://example.test/n'},
+        );
+        expect(based.containsKey('access'), isFalse);
+        expect(zoneProblem(based), isNull);
+        // A stored shared bay keeps its share and access.
+        const stored = {
+          'name': 'B1',
+          'access': 'scooterHeavy',
+          'condition': {
+            'bay': 'motorcycle',
+            'use': 'share',
+            'share': 'scooter_heavy',
+            'allow': {'scooter': true, 'heavy': true},
+          },
+        };
+        final kept = zoneWithBasis(
+          {...stored},
+          {'source_url': 'https://example.test/n'},
+        );
+        expect(kept['access'], 'scooterHeavy');
+        expect((kept['condition'] as Map)['share'], 'scooter_heavy');
+        expect(zoneProblem(kept), isNull);
+        // Its bay cleared: no access to write back, as before (#190).
+        final cleared = zoneWithCondition(
+          stored,
+          const ParkingCondition(allow: ZoneAllow(scooter: true, heavy: true)),
+        );
+        expect(cleared.containsKey('access'), isFalse);
+        expect(zoneProblem(cleared), isNull);
+      });
+    });
+
     test('分區選規則時一併帶上規則的費率（#155 決定 51）', () {
       final z = zoneWithPlan({'name': 'A'}, 'p2', [...plans]);
       expect(z['fee_plan'], 'p2');
@@ -260,6 +493,21 @@ void main() {
           'expires_on': '2026-12-31',
         },
       );
+      // The access-only bay takes a basis once its bay is picked (#494).
+      expect(spots.errors['parking_zones'], contains('請先選格位種類'));
+      final start = zoneCondition(spots.zones[0]);
+      spots.setZone(
+        0,
+        zoneWithCondition(
+          spots.zones[0],
+          ParkingCondition(
+            bay: Bay.motorcycle,
+            use: BayUse.usual,
+            basis: start.basis,
+            allow: start.allow,
+          ),
+        ),
+      );
       spots.addZone(like: spots.zones[0]);
       expect(areaCards(spots.zones).first.indexes, [0, 1, 3]);
       // The new bay rests on the area's notice too.
@@ -296,6 +544,101 @@ void main() {
       expect((sent['parking_zones'] as List)[2]['fee'], heavyHourly);
       expect((sent['parking_zones'] as List)[3]['access'], 'scooterOnly');
     });
+
+    test('只有舊 access 的分區：改名稱照原樣送；補依據先選格位，選了普大共用才寫 share（#494）', () async {
+      await spots.open(officialId);
+      // Zone 0 is the access-only scooterHeavy one: a new name and another
+      // plan leave everything else as stored.
+      spots.setCard(areaCards(spots.zones).first, name: '機車區 B1');
+      spots.setZone(0, zoneWithPlan(spots.zones[0], 'p2', spots.plans));
+      expect(spots.errors, isEmpty);
+      expect(await spots.save(''), isTrue);
+      final renamed =
+          (gateway.spotUpdates.last.$2['parking_zones'] as List)[0] as Map;
+      expect(
+        renamed,
+        {...zones[0], 'name': '機車區 B1', 'fee_plan': 'p2', 'fee': heavyHourly}
+          ..remove('area'),
+      );
+
+      await spots.open(officialId);
+      final first = areaCards(spots.zones).first;
+      spots.setCard(first, basis: {'source_url': 'https://example.test/n'});
+      expect(spots.zones[0]['access'], 'scooterHeavy');
+      expect(spots.errors['parking_zones'], contains('請先選格位種類'));
+      final updates = gateway.spotUpdates.length;
+      expect(await spots.save(''), isFalse);
+      expect(gateway.spotUpdates, hasLength(updates));
+
+      final c = zoneCondition(spots.zones[0]);
+      ParkingCondition bay({bool shared = false}) => ParkingCondition(
+        bay: Bay.motorcycle,
+        use: shared ? BayUse.share : null,
+        share: shared ? ShareKind.scooterHeavy : null,
+        basis: c.basis,
+        allow: c.allow,
+      );
+      spots.setZone(0, zoneWithCondition(spots.zones[0], bay()));
+      expect(spots.errors, isEmpty);
+      expect(
+        (spots.zones[0]['condition'] as Map).containsKey('share'),
+        isFalse,
+      );
+      spots.setZone(0, zoneWithCondition(spots.zones[0], bay(shared: true)));
+      expect(await spots.save(''), isTrue);
+      final sent =
+          (gateway.spotUpdates.last.$2['parking_zones'] as List)[0] as Map;
+      expect(sent['access'], 'scooterHeavy');
+      expect((sent['condition'] as Map)['share'], 'scooter_heavy');
+      expect((sent['condition'] as Map)['basis'], {
+        'source_url': 'https://example.test/n',
+      });
+    });
+
+    test('只有舊 access 的分區：選了格位又改回未確認，存檔仍要先選格位（#494）', () async {
+      await spots.open(officialId);
+      final start = zoneCondition(spots.zones[0]);
+      spots.setZone(
+        0,
+        zoneWithCondition(
+          spots.zones[0],
+          ParkingCondition(bay: Bay.motorcycle, allow: start.allow),
+        ),
+      );
+      expect(spots.errors, isEmpty);
+      spots.setZone(
+        0,
+        zoneWithCondition(spots.zones[0], ParkingCondition(allow: start.allow)),
+      );
+      expect(spots.zones[0]['condition'], {'allow': start.allow!.toJson()});
+      expect(spots.errors['parking_zones'], contains('請先選格位種類'));
+      expect(await spots.save(''), isFalse);
+      expect(gateway.spotUpdates, isEmpty);
+    });
+
+    test(
+      '沒有分區、只有 parking_access=scooterHeavy 的停車場：編輯不寫出 condition（#494）',
+      () async {
+        gateway.spotRows[officialId] = {
+          ...lotRow(gateway),
+          'parking_zones': const <Object?>[],
+          'parking_access': 'scooterHeavy',
+          'condition': null,
+        };
+        await spots.open(officialId);
+        expect(spots.lot, isTrue);
+        spots.set('name', '濱江停車場');
+        spots.set('parking_access', 'scooterHeavy');
+        spots.setKind(SpaceKind.offStreet);
+        expect(spots.draft['condition'], isNull);
+        expect(spots.errors, isEmpty);
+        expect(await spots.save(''), isTrue);
+        final sent = gateway.spotUpdates.last.$2;
+        expect(sent['name'], '濱江停車場');
+        expect(sent['condition'], isNull);
+        expect(jsonList(sent['parking_zones']), isEmpty);
+      },
+    );
 
     test('刪除仍被引用的規則：表單不刪；伺服器拒絕時顯示哪條規則在用', () async {
       await spots.open(officialId);
@@ -372,6 +715,137 @@ void main() {
     const visit = {
       'scooter': {'mode': 'per_visit', 'amount': 20},
     };
+
+    group('只有舊 access: scooterHeavy 的分區（#494）', () {
+      const legacy = {'id': 'z1', 'name': '機車區', 'access': 'scooterHeavy'};
+      const sharedCondition = {
+        'bay': 'motorcycle',
+        'use': 'share',
+        'share': 'scooter_heavy',
+        'allow': {'scooter': true, 'heavy': true},
+      };
+      ReviewSpot lot(List<Map<String, Object?>> zones) => ReviewSpot(
+        sourceId: officialId,
+        official: true,
+        values: {
+          ...sampleSpots()[officialId]!.values,
+          'space_type': 'offStreet',
+          'parking_zones': zones,
+        },
+      );
+      ReviewReport report(Map<String, dynamic> proposed) => ReviewReport(
+        id: 'r-494',
+        sourceId: officialId,
+        reason: '分區',
+        field: 'zones',
+        proposed: proposed,
+        createdAt: reportTime,
+      );
+      String? check(ReviewSpot spot, Map<String, dynamic> proposed) =>
+          validatePatch(
+            applicablePatch(initialProposal(report(proposed), spot), spot),
+            spot,
+          );
+      // As a rider's build sends it: the access read as 普大共用格.
+      const shared = {
+        'parking_zones': [
+          {'id': 'z1', 'condition': sharedCondition, 'access': 'scooterHeavy'},
+        ],
+      };
+
+      test('套用建議與修改後套用都擋下，不送出', () async {
+        final gateway = FakeAdminGateway(access: adminAal2);
+        addTearDown(gateway.dispose);
+        final r = report(shared);
+        gateway
+          ..reports = [r]
+          ..spots = {
+            officialId: lot([legacy]),
+          };
+        final review = ReviewController(gateway);
+        await review.load();
+        await review.decide(r, ReviewDecision.accept, '');
+        expect(review.error, contains('請先到點位頁選格位種類'));
+        expect(review.pending, isNull);
+        review.startEdit(r);
+        await review.decide(r, ReviewDecision.acceptEdited, '');
+        expect(review.error, contains('請先到點位頁選格位種類'));
+        expect(review.pending, isNull);
+        await review.flush();
+        expect(gateway.resolved, isEmpty);
+      });
+
+      test('採納會寫出 share: scooter_heavy 的建議被擋，請先到點位頁選格位種類', () {
+        final spot = lot([legacy]);
+        expect(check(spot, shared), contains('請先到點位頁選格位種類'));
+        // A zone stored with an explicit null condition is the same.
+        expect(
+          check(
+            lot([
+              {...legacy, 'condition': null},
+            ]),
+            shared,
+          ),
+          contains('請先到點位頁選格位種類'),
+        );
+        // Only who may park, or only the guide: no shared use, adopted.
+        expect(
+          check(spot, {
+            'parking_zones': [
+              {
+                'id': 'z1',
+                'condition': {
+                  'allow': {'scooter': true, 'heavy': false},
+                },
+                'access': null,
+              },
+            ],
+          }),
+          isNull,
+        );
+        expect(
+          check(spot, {
+            'parking_zones': [
+              {'id': 'z1', 'guide': '入口右側'},
+            ],
+          }),
+          isNull,
+        );
+        // A new zone is the rider's own pick.
+        expect(
+          check(spot, {
+            'parking_zones': [
+              {
+                'name': 'B2',
+                'condition': sharedCondition,
+                'access': 'scooterHeavy',
+              },
+            ],
+          }),
+          isNull,
+        );
+        // Picked on the spot page first: the same suggestion is adopted.
+        final picked = lot([
+          {...legacy, 'condition': sharedCondition},
+        ]);
+        expect(check(picked, shared), isNull);
+      });
+
+      test('場站層級：停車場的頂層 condition 帶 share 會被現有檢查擋下', () {
+        final spot = lot(const []);
+        expect(
+          check(spot, {
+            'condition': {
+              'bay': 'motorcycle',
+              'use': 'share',
+              'share': 'scooter_heavy',
+              'charge': 'toll',
+            },
+          }),
+          contains('停放條件和格位類型不一致'),
+        );
+      });
+    });
 
     test('全場費率的規則有分區共用時要問改哪裡', () {
       final shared = sharedPlanOf({'fee': visit}, spot)!;
@@ -529,6 +1003,18 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.byKey(const ValueKey('bay-problem-1')), findsNothing);
         expect(find.text('已修改'), findsNothing);
+        // The access-only scooterHeavy zone (#494): bay 未確認, and a charge
+        // set without a bay asks for the bay first.
+        await reach(find.byKey(const ValueKey('bay-0')));
+        expect(find.text('格位未確認 ・ 收費未確認'), findsOneWidget);
+        final toll = find.byKey(const ValueKey('bay-0-charge-toll'));
+        await reach(toll);
+        await tester.tap(toll.hitTestable());
+        await tester.pumpAndSettle();
+        final prompt = find.byKey(const ValueKey('bay-problem-0'));
+        await reach(prompt);
+        expect(tester.widget<Text>(prompt).data, contains('請先選格位種類'));
+        expect(tester.takeException(), isNull);
         await reach(find.byKey(const ValueKey('fee-source-text')));
         expect(find.textContaining('機車每小時10元'), findsOneWidget);
         expect(tester.takeException(), isNull);

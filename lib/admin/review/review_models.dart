@@ -611,6 +611,30 @@ String formatValue(String key, Object? value) {
   };
 }
 
+/// Why adopting [next] over [current] (a lot's zones) would write a shared
+/// use nobody verified, or null (#494): a zone stored with only
+/// `access: scooterHeavy` gains `share: scooter_heavy`. A rider's build reads
+/// that access as 普大共用 and sends it back, so the admin picks the bay on
+/// the spot page first; a new zone (no id) is the rider's own pick.
+String? unverifiedShare(List<Json> current, List<Json> next) {
+  for (final z in next) {
+    final id = z['id'];
+    if (id == null) continue;
+    final before = current.where((c) => c['id'] == id).firstOrNull;
+    if (before == null ||
+        before['access'] != ParkingAccess.scooterHeavy.name ||
+        before['condition'] != null) {
+      continue;
+    }
+    final condition = z['condition'];
+    if (condition is Map && condition['share'] == ShareKind.scooterHeavy.wire) {
+      final name = (z['name'] as String? ?? '').trim();
+      return '「$name」只有舊的普大共用標記，格位種類還沒查證，這則建議會把它寫成普大共用格。請先到點位頁選格位種類';
+    }
+  }
+  return null;
+}
+
 /// Mirrors the table checks so an invalid patch never reaches the RPC.
 String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
   for (final MapEntry(:key, :value) in patch.entries) {
@@ -689,6 +713,10 @@ String? validatePatch(Map<String, dynamic> patch, ReviewSpot spot) {
         if (!validClosure(value)) return '暫時無法停車的資料不正確，請重新選擇預計恢復日期';
       case FieldInput.entries:
         if (!validEntries(key, value)) return '${field.label}的資料不正確';
+        final unverified = key == 'parking_zones'
+            ? unverifiedShare(jsonList(spot.values[key]), jsonList(value))
+            : null;
+        if (unverified != null) return unverified;
       case FieldInput.fee:
         if (value == null) break;
         final fee = value is Fee ? value : Fee.tryParse(value);

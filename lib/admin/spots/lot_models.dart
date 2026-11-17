@@ -208,15 +208,29 @@ List<AreaCard> areaCards(Object? zones) {
 }
 
 /// A zone's condition as the editor starts from it: the stored one, else
-/// the one its legacy access stands for, else nothing known.
+/// the one its legacy access stands for ([legacyZoneStart]), else nothing
+/// known.
 ParkingCondition zoneCondition(Json zone) =>
     ParkingCondition.fromJson(zone['condition'], zone: true) ??
     // A basis still being typed must not drop the rest of the condition.
     ParkingCondition.fromJson(_withoutBasis(zone['condition']), zone: true) ??
-    zoneConditionOf(
-      ParkingAccess.values.where((a) => a.name == zone['access']).firstOrNull,
-    ) ??
+    legacyZoneStart(zone['access']) ??
     const ParkingCondition();
+
+/// The condition an access-only zone starts from: the one its legacy access
+/// stands for, except `scooterHeavy` (#494). That one is the importer's
+/// guess for a 機車區 and not verified, so it starts from who may park only,
+/// its bay and shared use 未確認 until someone picks them: a shared use read
+/// off it would let heavy bikes borrow the scooter count (#490).
+ParkingCondition? legacyZoneStart(Object? access) {
+  final legacy = ParkingAccess.values.asNameMap()[access];
+  final c = zoneConditionOf(legacy);
+  if (c == null || legacy != _unverifiedAccess) return c;
+  return ParkingCondition(allow: c.allow);
+}
+
+/// The legacy access whose bay a zone condition never takes unpicked.
+const _unverifiedAccess = ParkingAccess.scooterHeavy;
 
 Object? _withoutBasis(Object? condition) => condition is Map
     ? ({...condition.cast<String, dynamic>()}..remove('basis'))
@@ -235,13 +249,11 @@ Json zoneWithCondition(Json zone, ParkingCondition condition) {
       ..remove('condition')
       ..remove('access');
   }
-  final access = legacyAccess(condition);
   final json = condition.toJson().cast<String, dynamic>();
   // A basis still being typed stays as typed (zoneProblem names it).
   final typed = rawBasis(zone);
   if (condition.basis == null && typed != null) json['basis'] = typed;
-  return {...zone, 'condition': json, 'access': ?access?.name}
-    ..removeWhere((k, v) => k == 'access' && access == null);
+  return _written(zone, json, condition);
 }
 
 /// [zone] resting on [basis] (`{source_url, effective_date?, expires_on?}`
@@ -251,10 +263,35 @@ Json zoneWithBasis(Json zone, Json? basis) {
   final c = zoneCondition(zone);
   final json = c.toJson().cast<String, dynamic>()..remove('basis');
   if (basis != null) json['basis'] = basis;
-  final access = legacyAccess(c);
+  return _written(zone, json, c);
+}
+
+/// [zone] holding condition [json] ([condition] as parsed): `access` is
+/// what the condition derives (decision 32), except for a `scooterHeavy`
+/// zone stored without a condition whose bay nobody has picked (#494).
+/// That one keeps its legacy access, so [zoneProblem] asks for the bay
+/// before the save, and goes back to how it was stored when the edit comes
+/// back to where it started.
+Json _written(Json zone, Json json, ParkingCondition condition) {
+  if (condition.bay == null && _accessOnly(zone)) {
+    final start = legacyZoneStart(zone['access']);
+    if (start != null && canonicalJson(json) == canonicalJson(start.toJson())) {
+      return {...zone}..remove('condition');
+    }
+    return {...zone, 'condition': json};
+  }
+  final access = legacyAccess(condition);
   return {...zone, 'condition': json, 'access': ?access?.name}
     ..removeWhere((k, v) => k == 'access' && access == null);
 }
+
+/// Whether [zone] is stored with only an unverified `scooterHeavy`, or is
+/// one being edited whose bay is still to be picked: an access its
+/// condition does not write back (#494).
+bool _accessOnly(Json zone) =>
+    zone['access'] == _unverifiedAccess.name &&
+    (zone['condition'] == null ||
+        !zoneConditionConsistent(zone.cast<String, Object?>()));
 
 /// [zone] using plan [id] of [plans] (its fee copied), or none.
 Json zoneWithPlan(Json zone, String? id, List<Json> plans) {
@@ -277,6 +314,36 @@ List<Json> zonesFollowingPlans(List<Json> zones, List<Json> plans) => [
       z,
 ];
 
+/// What a `scooterHeavy` zone stored without a condition asks for when it is
+/// edited without a bay (#494).
+String bayFirstProblem(String name) =>
+    '「$name」請先選格位種類：機車格（一般或普大共用）、重機格或汽車格。只改名稱或費率不必選';
+
+/// Why [zones] cannot be saved against [stored], the zones as loaded, or
+/// null: a zone stored with only `access: scooterHeavy` that now has a
+/// condition without a bay (#494). [zoneProblem] sees that while the access
+/// is kept; this also catches a bay picked and then set back to 未確認,
+/// which writes the condition the usual way.
+String? unpickedBayProblem(List<Json> stored, List<Json> zones) {
+  for (final (i, z) in zones.indexed) {
+    final id = z['id'];
+    final before = id == null
+        ? (i < stored.length && stored[i]['id'] == null ? stored[i] : null)
+        : stored.where((s) => s['id'] == id).firstOrNull;
+    if (before == null ||
+        before['access'] != _unverifiedAccess.name ||
+        before['condition'] != null ||
+        z['condition'] == null) {
+      continue;
+    }
+    final c = ParkingCondition.fromJson(z['condition'], zone: true);
+    if (c != null && c.bay == null) {
+      return bayFirstProblem((z['name'] as String? ?? '').trim());
+    }
+  }
+  return null;
+}
+
 /// Why [zone] cannot be saved, or null.
 String? zoneProblem(Json zone) {
   final name = (zone['name'] as String? ?? '').trim();
@@ -290,6 +357,9 @@ String? zoneProblem(Json zone) {
         ? '「$name」的依據：網址需以 https:// 開頭，日期格式為 YYYY-MM-DD，到期日要晚於生效日'
         : '「$name」的停放條件格式不正確';
   }
+  // A scooterHeavy zone stored without a condition gains one only with a
+  // bay picked (#494): its legacy access says nothing verified about it.
+  if (condition.bay == null && _accessOnly(zone)) return bayFirstProblem(name);
   final allow = condition.allow;
   if (allow == null || !allow.states('scooter') || !allow.states('heavy')) {
     return '「$name」請選普通機車與大型重機可不可停';

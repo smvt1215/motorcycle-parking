@@ -298,7 +298,9 @@ class SpotsController extends ChangeNotifier {
     if (lot && (record!.isNew || _edits.containsKey('fee_plans')))
       'fee_plans': ?plansProblem(plans, jsonList(record!.values['fee_plans'])),
     if (lot && (record!.isNew || _edits.containsKey('parking_zones')))
-      'parking_zones': ?zones.map(zoneProblem).nonNulls.firstOrNull,
+      'parking_zones':
+          ?zones.map(zoneProblem).nonNulls.firstOrNull ??
+          unpickedBayProblem(jsonList(record!.values['parking_zones']), zones),
     // 不適用 beside a vehicle the spot lets park (PM_ANS_20261101_55).
     if ((record!.isNew ||
             changed('fee') ||
