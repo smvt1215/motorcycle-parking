@@ -8,8 +8,8 @@ import '../../models/parking.dart';
 import '../../models/sighting.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/four_sign_plates.dart';
+import '../../ui/minute_ticker.dart';
 import '../hidden_riders/spot_more_menu.dart' show UnhideButton;
-import '../map/spot_fees.dart' show MinuteTicker;
 import '../map/spot_preview.dart' show previewDistance, previewSubtitle;
 import '../map/spot_sheet.dart' show showSpot;
 
