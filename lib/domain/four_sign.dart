@@ -1386,8 +1386,9 @@ _Price _priceOf(
 }
 
 /// A zone's old text for [vehicle], kept to that vehicle (the same rule as
-/// spot_detail_display.dart's `zoneLegacyPrice`): with any per-vehicle text, a vehicle without its own
-/// has none (未提供), never the general note; the general note only when
+/// spot_detail_display.dart's `zoneLegacyPrice`): with any per-vehicle
+/// text, a vehicle without its own has none (未提供), never the general
+/// note; the general note only when
 /// no vehicle has its own and it does not repeat the car's. Null when
 /// other vehicles have text and this one has none: 未提供, with no
 /// fallback.
