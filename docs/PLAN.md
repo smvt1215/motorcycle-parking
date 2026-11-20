@@ -26,9 +26,9 @@
 - **權限收斂（2026-11-01）**：內部 helper 與觸發器函式收回 anon／authenticated 的 EXECUTE（#195 P0：#221、#223），staging 以 anon 驗證 App 正常。
 - **即時車位**：P2 官方動態已上線 staging（臺北停管處 XML V2，每 5 分鐘擷取，[計畫](REALTIME_AVAILABILITY_UI_PLAN.md)，#179、#180）；國定假日依人事行政總處辦公日曆表算假日，時段依目前時間判斷可不可停（#120、#182）。
 - **設計定稿（Ver.143 定案，2026-10-31；目前 Ver.155，2026-11-01 核准）**：[停車決策歷程重設計](https://claude.ai/artifact/Jz11USZZhRtrZMYhCqm7zB)（App 每張畫板有 iOS 與 Android 兩版；詳情為四面路牌：能不能停 → 有沒有位 → 怎麼算錢 → 停哪裡）。定稿取代決定 62–64 的舊手稿，#187 與 `feat/space-taxonomy-ui` 不再沿用，改從 `main` 重做。分工與進度：
-  1. 格位 7 類與停放條件／費率契約改版（#188）：第 1 層（分區／路段 id、格位 7 類）已合併（#194、#197）。費率與限時層進行中，使用者決定記在 #188 的留言（費率 8 題、收費方式必填、費率沒寫一律顯示「未提供」、分區官方未標示分車種、車種資格改掛在每個格位條目上）。大型重機停汽機車共用格依時段判斷，臺北只有收費的共用格在機車時段可停（#226）。
-  2. 騎士回報改 4 級量表、依分區／路段與車種（#189）：後端已合併（#199，取代 #154），App 端車友回報 UI 待做。
-  3. App 四面路牌改版（#190）：個人中心與記錄停車照（#193）、個人中心與貢獻小頁（#218）、地圖標記與「地圖怎麼看」（#220）已合併；四面路牌（#222）審查中；詳情整頁、收藏卡、篩選列、平板版面與費率限時表單接在後面。Android 的 Apple 登入另開 #219。
+  1. 格位 7 類與停放條件／費率契約改版（#188）：第 1 層（分區／路段 id、格位 7 類）已合併（#194、#197）。費率與限時層（第 2 層）已合併（#240、#242；分區沒有自己的費率時沿用全場費率），使用者決定記在 #188 的留言（費率 8 題、收費方式必填、費率沒寫一律顯示「未提供」、分區官方未標示分車種、車種資格改掛在每個格位條目上）。大型重機停汽機車共用格依時段判斷，臺北只有收費的共用格在機車時段可停（#226）。
+  2. 騎士回報改 4 級量表、依分區／路段與車種（#189）：後端（#199，取代 #154）與 App 端（#374：4 級量表的車友回報 `SightingSheet`、有沒有位的車友列、地圖角標）都已合併，#189 已完成。
+  3. App 四面路牌改版（#190）：個人中心與記錄停車照（#193）、個人中心與貢獻小頁（#218）、地圖標記與「地圖怎麼看」（#220）、四面路牌（#222）、詳情整頁（#336）已合併；收藏卡、篩選列、平板版面與費率限時表單接在後面。Android 的 Apple 登入另開 #219。
   4. 分區與路段照片併入社群核實 P2（#191，未排程，先只開 `evidence_url`；依賴 #119）。
   - 管理站：#188 的 Flutter 管理站表單（格位、費率、限時）只做最小改動、能用就好；React＋Redux Toolkit 管理站已開始實作（#195 P7）：基礎層（#213）、審核頁含駁回與修改後套用（#214、#216）已合併，其餘頁面等 admin_v1 接資料。
   - 統一 API 層（#195）：P0 權限查核完成（#221、#223）；P1 進行中：`api_v1`／`admin_v1`／`private` schema 與 `api_v1.client_config()`（#227）、RTK Query 用戶端（#229）已合併，Dart 用戶端產生器（#233）與部署後 exposed schemas 檢查（#234）審查中。已決定：傳輸層用 OpenAPI 3.1、官方點與社群點 viewport 合併為 `api_v1.spots_in_viewport`、共用 TS 核心放 `supabase/functions/_shared/core/`；提案第 7 節第 4–7 題待決定。staging 的 Data API 已開放 `api_v1`、`admin_v1`。
@@ -275,7 +275,7 @@ UI：`material_ui`、`cupertino_ui`（Flutter 官方設計套件，取代框架�
 - `eligibility(spot, vehicle, rule)` → `allowed / conditional(附說明) / notAllowed`，地圖標記顏色據此呈現。
 
 ### 費率結構（2026-10-25）
-`community_spots` 與 `official_heavy_spots` 的 `fee`（jsonb，可為 null）以普通機車、大型重機分開記錄費率；`fee_note` 保留為顯示文字，由 `lib/models/fee.dart` 的 `feeNoteOf` 依 `fee` 組成，App 與管理站共用同一份純 Dart 函式。詳情有結構化 `fee` 時以它為準（`spotFeeSummary`／`zoneFeeSummary`，#80），沒有才退回 `fee_note`；`parking_zones` 每區也可選填同格式的 `fee`（`valid_zone_fees`，#80）。依價格篩選與比較之後再接 `fee`。
+`community_spots` 與 `official_heavy_spots` 的 `fee`（jsonb，可為 null）以普通機車、大型重機分開記錄費率；`fee_note` 保留為顯示文字，由 `lib/models/fee.dart` 的 `feeNoteOf` 依 `fee` 組成，App 與管理站共用同一份純 Dart 函式。詳情有結構化 `fee` 時以它為準（`lib/domain/spot_detail_display.dart` 的 `placePrice`，#80、#188 第 2 層），沒有才退回 `fee_note`；`parking_zones` 每區也可選填同格式的 `fee`（`valid_zone_fees`，#80）。依價格篩選與比較之後再接 `fee`。
 
 ```text
 fee = {"scooter": rate, "heavy": rate | {"mode":"same_as_scooter"} | {"mode":"same_as_car"}}

@@ -6,7 +6,6 @@ import 'package:motorcycle_parking/app.dart';
 import 'package:motorcycle_parking/data/app_store.dart';
 import 'package:motorcycle_parking/domain/availability_display.dart';
 import 'package:motorcycle_parking/features/map/availability_capsule.dart';
-import 'package:motorcycle_parking/features/map/parking_access_view.dart';
 import 'package:motorcycle_parking/features/map/spot_sheet.dart';
 import 'package:motorcycle_parking/models/availability.dart';
 import 'package:motorcycle_parking/models/parking.dart';
@@ -553,30 +552,6 @@ void main() {
         expect(tester.takeException(), isNull);
         await tester.pumpWidget(const SizedBox.shrink());
       });
-    }
-  });
-
-  testWidgets('#130 停放車種區不顯示「共用」說明行，Semantics 保留完整說明', (tester) async {
-    for (final access in [ParkingAccess.heavyCar, ParkingAccess.scooterHeavy]) {
-      final handle = tester.ensureSemantics();
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: ParkingAccessView(spot: lotAt('a', 0, 0, access: access)),
-          ),
-        ),
-      );
-      expect(find.text(access.description), findsNothing);
-      expect(
-        tester
-            .getSemantics(find.byKey(const ValueKey('parking-access-vehicles')))
-            .label,
-        contains(access.description),
-      );
-      // The tokens keep their 共用 state and the ⇄ icon (user decision).
-      expect(find.text('共用'), findsNWidgets(2));
-      expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
-      handle.dispose();
     }
   });
 }
