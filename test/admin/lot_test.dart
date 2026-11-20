@@ -483,7 +483,7 @@ void main() {
       expect((sent['parking_zones'] as List)[0]['fee'], fifteen.toJson());
     });
 
-    test('分區改用另一條規則、新增區域與格位', () async {
+    test('分區改用另一條規則、新增分區與格位', () async {
       await spots.open(officialId);
       spots.setZone(2, zoneWithPlan(spots.zones[2], 'p2', spots.plans));
       spots.setCard(
@@ -915,7 +915,7 @@ void main() {
       Size(820, 1180),
       Size(1440, 960),
     ]) {
-      testWidgets('路外點位表單在 ${size.width.round()} px 顯示計費規則與區域卡，不溢出、可點', (
+      testWidgets('路外點位表單在 ${size.width.round()} px 顯示計費規則與分區卡，不溢出、可點', (
         tester,
       ) async {
         controller = AdminController(gateway);
@@ -955,12 +955,12 @@ void main() {
 
         expect(
           find.descendant(
-            of: await revealFold(tester, '計費規則與區域'),
+            of: await revealFold(tester, '計費規則與分區'),
             matching: find.textContaining('計費規則 2 條'),
           ),
           findsOneWidget,
         );
-        await openFold(tester, '計費規則與區域');
+        await openFold(tester, '計費規則與分區');
         await reach(find.byKey(const ValueKey('plan-p2')));
         expect(find.text('重機計時'), findsWidgets);
         // The plan a zone uses cannot be deleted.

@@ -464,7 +464,7 @@ function session(role, aal, factors = [factor]) {
           await page.screenshot({ path: path.join(output, `${name}-spot-fold-space.png`) });
           assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, `${name} space section scrolls sideways`);
           // Its structured fee: the editor and the notice board riders read.
-          await openFold('計費規則與區域');
+          await openFold('計費規則與分區');
           {
             // The board reads as one node (its label and its rows) that
             // Flutter writes either as text or as an aria-label.
@@ -491,7 +491,7 @@ function session(role, aal, factors = [factor]) {
             const size = mobile ? { width: 402, height: 874 } : { width: 820, height: 1180 };
             await page.setViewportSize(size);
             await page.waitForTimeout(500);
-            const areas = page.getByText('區域與格位', { exact: true });
+            const areas = page.getByText('分區與格位', { exact: true });
             await page.mouse.move(size.width * (mobile ? 0.5 : 0.75), size.height * 0.5);
             const inView = async () => {
               const at = (await areas.count()) ? await areas.first().boundingBox() : null;

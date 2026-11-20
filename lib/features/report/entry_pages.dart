@@ -397,8 +397,9 @@ class EntryListArgs {
   bool get adding => spot == null;
 }
 
-/// 全區 or 整條路, as a list and its pages call it.
-String entryWholeName(EntryType type) => type == EntryType.zone ? '全區' : '整條路';
+/// 整個停車點 or 整條路, as a list and its pages call it.
+String entryWholeName(EntryType type) =>
+    type == EntryType.zone ? '整個停車點' : '整條路';
 
 /// The drafts of [spot]'s entries; a street spot without segments reads as
 /// one (GAP risk 7).
@@ -688,9 +689,9 @@ class _EntryListPageState extends State<EntryListPage> {
         Text(
           zones
               ? (args.adding
-                    ? '每區各自有格位、可停車種和指引。全區先設好，新增的分區會沿用。'
+                    ? '每區各自有格位、可停車種和指引。先設好整個停車點，新增的分區會沿用。'
                     : showsWhole
-                    ? '要改哪一區？每區各自有格位、可停車種和指引；一起改就按「全區」。'
+                    ? '要改哪一區？每區各自有格位、可停車種和指引；一起改就按「整個停車點」。'
                     : '要改哪一區？每區各自有格位、可停車種和指引。')
               : '同一側可能有不同格位、不同費率，一段一段分開記。'
                     '${showsWhole ? '整條路一起改就按「整條路」。' : ''}'
@@ -1400,7 +1401,7 @@ class _EntryCard extends StatefulWidget {
     required this.onChanged,
     required this.onDelete,
     this.whole,
-    this.wholeName = '全區',
+    this.wholeName = '整個停車點',
   });
   final GlobalKey<FormState> linkForm;
   final EntryDraft draft;

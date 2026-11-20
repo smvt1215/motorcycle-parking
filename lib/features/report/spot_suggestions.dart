@@ -314,6 +314,13 @@ class _SentToastState extends State<_SentToast> {
   }
 }
 
+/// Where a lot without zones gets the zone its rules need (#487).
+const rulesNeedZoneNote = '在下方「入口、分區與格位、可停車種」新增分區後，才能提限時';
+
+/// Why a spot without rows to patch cannot take rules (#487): it has no
+/// zone to hold them, and none can be added from here.
+const rulesClosedNote = '這個點目前不能提限時';
+
 /// Whether suggestions can name [spot]'s zones and segments: TDX spots have
 /// no row to patch.
 bool _hasEntries(ParkingSpot spot) =>
@@ -679,8 +686,18 @@ class _SuggestionListPageState extends State<SuggestionListPage> {
                 key: const ValueKey('suggest-limits'),
                 leading: const Icon(Icons.schedule),
                 title: '限時／禁停／共用時段',
-                subtitle: street ? '現場標誌寫的' : null,
-                value: _rulesOpen ? limitSummary(spot) : '先新增分區',
+                subtitle: street
+                    ? '現場標誌寫的'
+                    : _rulesOpen
+                    ? null
+                    : _hasEntries(spot)
+                    ? rulesNeedZoneNote
+                    : rulesClosedNote,
+                value: _rulesOpen
+                    ? limitSummary(spot)
+                    : _hasEntries(spot)
+                    ? '先新增分區'
+                    : '目前不能提',
                 sentTag: mark(SuggestionItem.limits),
                 onTap: _rulesOpen
                     ? () => _open(

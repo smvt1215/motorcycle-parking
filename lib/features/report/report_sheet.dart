@@ -488,7 +488,7 @@ class _ReportFormState extends State<ReportForm> {
   bool get lot => offStreet == true;
   Set<FacilityType> facilities = {};
 
-  /// The whole spot's rates: 全場費率 or 整條路費率.
+  /// The whole spot's rates: 整個停車點的費率 or 整條路費率.
   Fee fee = const Fee();
 
   /// Each entry of 停哪裡 (C1), kept apart so a change of mind loses neither.
@@ -1003,7 +1003,7 @@ class _ReportFormState extends State<ReportForm> {
     }),
   );
 
-  /// 全場費率 or 整條路費率, or an entry's own rates, on F1 (C14).
+  /// 整個停車點的費率 or 整條路費率, or an entry's own rates, on F1 (C14).
   Future<void> editFee(BuildContext context, [EntryDraft? draft]) async {
     applyRules(rules, entries);
     final next = await openFeePage(
@@ -1027,7 +1027,7 @@ class _ReportFormState extends State<ReportForm> {
     });
   }
 
-  /// F0: a lot's zones and its 全場費率.
+  /// F0: a lot's zones and its 整個停車點的費率.
   Future<void> openFee() async {
     applyRules(rules, entries);
     await Navigator.of(context).push<void>(
@@ -1178,7 +1178,7 @@ class _ReportFormState extends State<ReportForm> {
                 subtitle: !picked
                     ? '先選這是哪一種停車點'
                     : lot
-                    ? '依分區或全場費率'
+                    ? '依分區或整個停車點的費率'
                     : '每一段各自一組',
                 value: feeSummary,
                 onTap: !picked

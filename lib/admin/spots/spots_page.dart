@@ -2439,7 +2439,7 @@ String? _summaryOf(SpotGroup group, SpotsController spots) {
     case SpotGroup.fees:
       if (spots.lot) {
         final plans = spots.plans.length, zones = spots.zones.length;
-        return plans == 0 && zones == 0 ? null : '計費規則 $plans 條・區域 $zones 個';
+        return plans == 0 && zones == 0 ? null : '計費規則 $plans 條・分區 $zones 個';
       }
       return text('fee_note');
     case SpotGroup.closure:

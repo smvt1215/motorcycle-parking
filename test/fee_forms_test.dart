@@ -491,7 +491,7 @@ void main() {
 
     test('沿用全場標籤帶實際費率；全場沒有費率寫未提供', () {
       final d = EntryDraft.ofZone(_lot.zones[1]);
-      expect(followTag(d, _lot.fee!).text, '沿用全場：20/時');
+      expect(followTag(d, _lot.fee!).text, '沿用整個停車點：20/時');
       expect(followTag(d, const Fee()).text, '未提供');
       expect(
         followTag(
@@ -502,7 +502,7 @@ void main() {
             car: Rate(FeeMode.free),
           ),
         ).text,
-        '沿用全場：普機 20/時、重機 免費、汽車 免費',
+        '沿用整個停車點：普機 20/時、重機 免費、汽車 免費',
       );
     });
 
@@ -595,9 +595,9 @@ void main() {
       expect(find.text('送出 0 項建議'), findsOneWidget);
       await tapKey(tester, 'fee-revert');
       expect(store.sent, isEmpty);
-      expect(find.text('將改回沿用全場'), findsOneWidget);
+      expect(find.text('將改回沿用整個停車點的費率'), findsOneWidget);
       expect(find.text('目前自己的費率'), findsOneWidget);
-      expect(find.text('全場費率'), findsOneWidget);
+      expect(find.text('整個停車點的費率'), findsOneWidget);
       expect(find.text('你要改的內容'), findsOneWidget);
       expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
       await tester.tap(submit('送出 1 項建議'));
@@ -607,7 +607,7 @@ void main() {
       expect((body['proposed'] as Map)['parking_zones'], [
         {'id': 'b2', 'fee': null},
       ]);
-      expect(body['reason'], '費率：B2 重機專區 自訂 → 沿用全場');
+      expect(body['reason'], '費率：B2 重機專區 自訂 → 沿用整個停車點');
     });
 
     testWidgets('取消與返回都回到編輯，已改的內容不變', (tester) async {
@@ -616,26 +616,26 @@ void main() {
       expect(find.text('送出 1 項建議'), findsOneWidget);
       await tapKey(tester, 'fee-revert');
       await tapKey(tester, 'fee-revert-cancel');
-      expect(find.text('將改回沿用全場'), findsNothing);
+      expect(find.text('將改回沿用整個停車點的費率'), findsNothing);
       expect(find.text('送出 1 項建議'), findsOneWidget);
       await tapKey(tester, 'fee-revert');
       await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
       await tester.pumpAndSettle();
       expect(find.byType(FeeEditor), findsOneWidget);
-      expect(find.text('將改回沿用全場'), findsNothing);
+      expect(find.text('將改回沿用整個停車點的費率'), findsNothing);
       expect(find.text('送出 1 項建議'), findsOneWidget);
     });
 
     testWidgets('沒有自己費率的分區與全場卡都沒有這顆按鈕', (tester) async {
       await pump(tester, _inherit);
       await tapKey(tester, 'suggest-fee');
-      expect(find.text('沿用全場：20/時'), findsOneWidget);
+      expect(find.text('沿用整個停車點：20/時'), findsOneWidget);
       await tapText(tester, 'B9 沿用區');
       expect(find.byType(FeeEditor), findsOneWidget);
       expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
       await tester.tap(find.byKey(const ValueKey('form-header-leading')).last);
       await tester.pumpAndSettle();
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       expect(find.byKey(const ValueKey('fee-revert')), findsNothing);
     });
 
@@ -689,7 +689,7 @@ void main() {
     Future<void> changeCar(WidgetTester tester) async {
       await pump(tester, _lot);
       await tapKey(tester, 'suggest-fee');
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
     }
 
     final link = find.byKey(const ValueKey('evidence-url'));
@@ -809,7 +809,7 @@ void main() {
         ) async {
           await pump(tester, _lot, width: width, scale: scale);
           await tapKey(tester, 'suggest-fee');
-          await tapText(tester, '全場費率');
+          await tapText(tester, '整個停車點的費率');
           await chooseFeeMode(tester, 'car', 'free');
           await tester.ensureVisible(link);
           await tester.enterText(link, 'user@example.com');
@@ -932,7 +932,7 @@ void main() {
       await pump(tester, _noted);
       await tapKey(tester, 'suggest-fee');
       expect(find.textContaining('這區寫：'), findsOneWidget);
-      expect(find.textContaining('沿用全場：'), findsNothing);
+      expect(find.textContaining('沿用整個停車點：'), findsNothing);
       expect(
         find.byWidgetPredicate(
           (w) => w is Semantics && w.properties.label == '這區寫，$long',
@@ -1012,7 +1012,7 @@ void main() {
         ) async {
           await pump(tester, _mixedInherit, width: width, scale: scale);
           await tapKey(tester, 'suggest-fee');
-          expect(find.text('沿用全場：普機 20/時、重機 免費、汽車 依時段'), findsOneWidget);
+          expect(find.text('沿用整個停車點：普機 20/時、重機 免費、汽車 依時段'), findsOneWidget);
           expect(tester.takeException(), isNull);
         }, variant: TargetPlatformVariant({platform}));
       }
@@ -1022,10 +1022,10 @@ void main() {
       await pump(tester, _lot);
       await tapKey(tester, 'suggest-fee');
       expect(find.text('怎麼算錢・松壽地下停車場'), findsOneWidget);
-      expect(find.text('目前全場同價：每小時 20 元。'), findsNothing);
+      expect(find.text('目前整個停車點同價：每小時 20 元。'), findsNothing);
       expect(find.text('重機 20/時・上限 100'), findsOneWidget);
       expect(find.text('汽車 未提供'), findsOneWidget);
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       expect(find.byType(FeeEditor), findsOneWidget);
     });
   });
@@ -1034,7 +1034,7 @@ void main() {
     testWidgets('改全場費率：只送改到的車種，按鈕是送出 N 項建議', (tester) async {
       await pump(tester, _lot);
       await tapKey(tester, 'suggest-fee');
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       expect(find.text('送出 0 項建議'), findsOneWidget);
       expect(find.text('修改中'), findsNothing);
       await chooseFeeMode(tester, 'car', 'free');
@@ -1056,7 +1056,7 @@ void main() {
     testWidgets('改全場費率只要求改到的車種完整，沒改的不必補（#365 Codex）', (tester) async {
       await pump(tester, _partialLot);
       await tapKey(tester, 'suggest-fee');
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       await chooseFeeMode(tester, 'scooter', 'free');
       await tester.tap(submit('送出 1 項建議'));
       await tester.pumpAndSettle();
@@ -1071,7 +1071,7 @@ void main() {
     testWidgets('改到的車種規則沒選仍擋下（#365 Codex）', (tester) async {
       await pump(tester, _partialLot);
       await tapKey(tester, 'suggest-fee');
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       await chooseFeeMode(tester, 'car', 'per_visit');
       await tester.enterText(feeField('amount', 'car'), '20');
       await tester.pumpAndSettle();
@@ -1153,7 +1153,7 @@ void main() {
       store.signedIn = false;
       await pump(tester, _lot);
       await tapKey(tester, 'suggest-fee');
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       await chooseFeeMode(tester, 'car', 'free');
       await tester.tap(submit('送出 1 項建議'));
       await tester.pumpAndSettle();
@@ -1165,7 +1165,7 @@ void main() {
       store.refuse = const AccountSuspended(null);
       await pump(tester, _lot);
       await tapKey(tester, 'suggest-fee');
-      await tapText(tester, '全場費率');
+      await tapText(tester, '整個停車點的費率');
       await chooseFeeMode(tester, 'car', 'free');
       await tester.tap(submit('送出 1 項建議'));
       await tester.pumpAndSettle();
@@ -1286,7 +1286,56 @@ void main() {
         ),
       );
       expect(find.text('先新增分區'), findsOneWidget);
+      expect(find.text(rulesNeedZoneNote), findsOneWidget);
+      expect(find.text('入口、分區與格位、可停車種'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('suggest-limits')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TimeRulesPage), findsNothing);
     });
+
+    testWidgets('TDX 路外點沒有可改的分區：限時列停用，不指引新增分區', (tester) async {
+      await pump(
+        tester,
+        const ParkingSpot(
+          id: 'tdx:lot',
+          name: '交通部停車場',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.offStreet,
+          source: 'tdx',
+        ),
+      );
+      expect(find.text('目前不能提'), findsOneWidget);
+      expect(find.text(rulesClosedNote), findsOneWidget);
+      expect(find.text('先新增分區'), findsNothing);
+      expect(find.text(rulesNeedZoneNote), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('suggest-limits')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TimeRulesPage), findsNothing);
+    });
+
+    for (final (width, scale) in const [(320.0, 1.6), (390.0, 1.0)]) {
+      testWidgets('限時停用列在 $width 寬 $scale 倍不溢出', (tester) async {
+        for (final source in ['official', 'tdx']) {
+          await pump(
+            tester,
+            ParkingSpot(
+              id: '$source:lot',
+              name: '空',
+              lat: 25,
+              lng: 121,
+              city: '臺北市',
+              spaceType: SpaceType.offStreet,
+              source: source,
+            ),
+            width: width,
+            scale: scale,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
 
     for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
       for (final (width, scale) in const [

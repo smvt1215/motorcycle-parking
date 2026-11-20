@@ -73,7 +73,7 @@ class TimeRule {
 
   RuleKind kind;
 
-  /// Covers every entry, those added later too (整個停車場, 整條路).
+  /// Covers every entry, those added later too (整個停車點, 整條路).
   bool all;
 
   /// The entries it covers when not [all], by [EntryDraft.token].
@@ -366,7 +366,7 @@ String ruleScopeText(TimeRule rule, List<EntryDraft> drafts, String allWord) {
   return names.isEmpty ? '還沒選' : names.join('、');
 }
 
-/// A rule on its collapsed card: 全場　平日 07:00–20:00 每次限停 2 小時.
+/// A rule on its collapsed card: 整個停車點　平日 07:00–20:00 每次限停 2 小時.
 String ruleSummary(TimeRule rule, List<EntryDraft> drafts, String allWord) =>
     '${ruleScopeText(rule, drafts, allWord)}　'
     '${[rule.when, if (rule.detail.isNotEmpty) rule.detail].join(' ')}';

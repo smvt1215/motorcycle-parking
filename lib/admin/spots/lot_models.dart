@@ -347,8 +347,8 @@ String? unpickedBayProblem(List<Json> stored, List<Json> zones) {
 /// Why [zone] cannot be saved, or null.
 String? zoneProblem(Json zone) {
   final name = (zone['name'] as String? ?? '').trim();
-  if (name.isEmpty) return '每個區域都要有名稱';
-  if (name.length > 40) return '區域名稱「$name」請在 40 個字以內';
+  if (name.isEmpty) return '每個分區都要有名稱';
+  if (name.length > 40) return '分區名稱「$name」請在 40 個字以內';
   if (!zone.containsKey('condition')) return null;
   final condition = ParkingCondition.fromJson(zone['condition'], zone: true);
   if (condition == null) {

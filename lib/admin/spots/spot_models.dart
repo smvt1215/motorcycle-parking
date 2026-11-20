@@ -129,7 +129,7 @@ enum SpotGroup {
   final String label;
 
   /// A lot's rates are its plans and areas (design §2.6).
-  String title({required bool lot}) => this == fees && lot ? '計費規則與區域' : label;
+  String title({required bool lot}) => this == fees && lot ? '計費規則與分區' : label;
 }
 
 class SpotField {
