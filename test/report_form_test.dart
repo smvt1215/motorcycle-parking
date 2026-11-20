@@ -704,8 +704,8 @@ void main() {
     await tapKey(tester, 'spot-kind-lot');
     await tapKey(tester, 'n1-fee');
     expect(find.text('費率'), findsOneWidget);
-    expect(find.text('全場費率'), findsOneWidget);
-    await tester.tap(find.text('全場費率'));
+    expect(find.text('整個停車點的費率'), findsOneWidget);
+    await tester.tap(find.text('整個停車點的費率'));
     await tester.pumpAndSettle();
     expect(find.byType(FeeEditor), findsOneWidget);
     // C14: nothing is being changed in a spot not yet sent.
@@ -792,8 +792,8 @@ void main() {
     await tester.tap(find.text('B2 機車區'));
     await tester.pumpAndSettle();
     await tapKey(tester, 'fee-revert');
-    expect(find.text('將改回沿用全場'), findsOneWidget);
-    expect(find.text('全場未提供'), findsOneWidget);
+    expect(find.text('將改回沿用整個停車點的費率'), findsOneWidget);
+    expect(find.text('整個停車點的費率未提供'), findsOneWidget);
     expect(find.text('回到清單，這一區不帶費率'), findsOneWidget);
     expect(find.text('你要改的內容'), findsNothing);
     await tester.tap(find.widgetWithText(AdaptiveButton, '完成'));

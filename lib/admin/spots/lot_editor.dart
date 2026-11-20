@@ -435,7 +435,7 @@ class _PlanDialogState extends State<_PlanDialog> {
   }
 }
 
-/// A lot's zones as area cards (canvas AdminSpotForm 區域與格位): zones
+/// A lot's zones as area cards (canvas AdminSpotForm 分區與格位): zones
 /// with the same name and area are one card, one row per bay, each bay
 /// picking its plan.
 class LotAreasSection extends StatelessWidget {
@@ -474,7 +474,7 @@ class LotAreasSection extends StatelessWidget {
               contentPadding: EdgeInsets.zero,
               value: spots.draft['zones_complete'] == true,
               onChanged: (v) => spots.set('zones_complete', v),
-              title: const Text('分區資料已涵蓋全場'),
+              title: const Text('分區資料已涵蓋整個停車點'),
               subtitle: Text('開啟後，App 會把沒列出的分區當成不開放；不確定就保持關閉。', style: muted),
             ),
             if (cards.isEmpty) Text('還沒有分區。', style: muted),

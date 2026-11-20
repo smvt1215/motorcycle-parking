@@ -58,7 +58,7 @@ EntryTag feeTag(Fee fee, FeeVehicle v) {
   );
 }
 
-/// F0's tag for a zone with no rates of its own: 沿用全場：20/時, what it
+/// F0's tag for a zone with no rates of its own: 沿用整個停車點：20/時, what it
 /// pays now; 未提供 with no rates to follow (F1b).
 EntryTag followTag(EntryDraft d, Fee fee) {
   final why = whyNotApplicable(d);
@@ -75,8 +75,8 @@ EntryTag followTag(EntryDraft d, Fee fee) {
   final same = shown.every((e) => e.$2 == shown.first.$2);
   return EntryTag(
     same
-        ? '沿用全場：${shown.first.$2}'
-        : '沿用全場：${[for (final (v, b) in shown) '${_shortNames[v]} $b'].join('、')}',
+        ? '沿用整個停車點：${shown.first.$2}'
+        : '沿用整個停車點：${[for (final (v, b) in shown) '${_shortNames[v]} $b'].join('、')}',
   );
 }
 
@@ -281,13 +281,13 @@ class FeeZonesPage extends StatefulWidget {
   final List<EntryDraft> drafts;
   final Fee Function() spotFee;
 
-  /// 全場費率 in words, as the map reads it.
+  /// 整個停車點的費率 in words, as the map reads it.
   final String Function() wholeText;
 
   /// The spot a suggestion is about; null in a new spot.
   final ParkingSpot? spot;
 
-  /// A new spot keeps the rates 全場費率 gives back.
+  /// A new spot keeps the rates 整個停車點的費率 gives back.
   final ValueChanged<Fee>? onSpotFee;
 
   @override
@@ -335,8 +335,8 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
       ),
       children: [
         Text(
-          '${own || whole == '未提供' ? '全場費率：' : '目前全場同價：'}$whole。'
-          '${widget.drafts.isEmpty ? '' : '點一區可另設它的費率；全場一起改就按「全場費率」。'}',
+          '${own || whole == '未提供' ? '整個停車點的費率：' : '目前整個停車點同價：'}$whole。'
+          '${widget.drafts.isEmpty ? '' : '點一區可另設它的費率；一起改就按「整個停車點的費率」。'}',
         ),
         const SizedBox(height: 12),
         for (final (i, d) in widget.drafts.indexed) ...[
@@ -369,8 +369,8 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
           rows: [
             EntryRow(
               leading: const EntryIconTile(Icons.domain),
-              title: '全場費率',
-              subtitle: '$whole\n沒有另設費率的分區用全場費率',
+              title: '整個停車點的費率',
+              subtitle: '$whole\n沒有另設費率的分區用整個停車點的費率',
               onTap: () => open(null),
             ),
           ],
@@ -378,7 +378,8 @@ class _FeeZonesPageState extends State<FeeZonesPage> {
         const SizedBox(height: 12),
         const FormInfoNote(
           icon: Icons.info_outline,
-          text: '標「不適用」或沒填費率的車種，不會出現在公告牌。沒有另設費率的分區用全場費率；改了全場費率，這些分區會一起變。',
+          text:
+              '標「不適用」或沒填費率的車種，不會出現在公告牌。沒有另設費率的分區用整個停車點的費率；改了整個停車點的費率，這些分區會一起變。',
         ),
       ],
     );
@@ -460,7 +461,12 @@ class _FeeEditPageState extends State<FeeEditPage> {
 
   bool get adding => widget.spot == null;
   bool get street => widget.type == EntryType.segment;
-  String get wholeWord => street ? '整條路' : '全場';
+
+  /// 整條路 or 整個停車點, before the whole spot's rates.
+  String get wholeLead => street ? '整條路' : '整個停車點：';
+
+  /// The whole spot's rates by name.
+  String get wholeFee => street ? '整條路費率' : '整個停車點的費率';
 
   /// What the entry has of its own, which F1b can take away.
   Fee? get own => switch (draft?.fee) {
@@ -478,10 +484,10 @@ class _FeeEditPageState extends State<FeeEditPage> {
 
   String get wholeText => wholeFeeText(widget.spotFee, widget.spot?.feeNote);
 
-  /// F1b's button: 路邊沒有「全場」的說法.
-  String get revertLabel => street ? '改回沿用整條路費率' : '改回沿用全場';
-  String get revertTitle => street ? '將改回沿用整條路費率' : '將改回沿用全場';
-  String get followWords => street ? '沿用整條路' : '沿用全場';
+  /// F1b's button.
+  String get revertLabel => street ? '改回沿用整條路費率' : '改回沿用整個停車點的費率';
+  String get revertTitle => street ? '將改回沿用整條路費率' : '將改回沿用整個停車點的費率';
+  String get followWords => street ? '沿用整條路' : '沿用整個停車點';
 
   /// The vehicles the rider changed, one line each (C6).
   List<ChangeLine> get lines {
@@ -525,12 +531,12 @@ class _FeeEditPageState extends State<FeeEditPage> {
   String get intro {
     final whole = wholeFeeText(widget.spotFee, widget.spot?.feeNote);
     final name = draft?.displayName;
-    if (own != null) return '$name 目前有自己的費率；$wholeWord$whole。';
-    if (note != null) return '$wholeWord$whole。';
+    if (own != null) return '$name 目前有自己的費率；$wholeLead$whole。';
+    if (note != null) return '$wholeLead$whole。';
     final tail = adding ? '完成後回到新增停車點。' : '送出前還沒生效。';
     return name == null
-        ? '這裡改$wholeWord費率，沒有另設費率的${widget.type.unit}會一起變。$tail'
-        : '目前$wholeWord費率：$whole。這裡另設 $name 的費率，$tail';
+        ? '這裡改$wholeFee，沒有另設費率的${widget.type.unit}會一起變。$tail'
+        : '目前$wholeFee：$whole。這裡另設 $name 的費率，$tail';
   }
 
   /// Whether the zone stores any fee text, its rates' own too.
@@ -602,7 +608,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
     return precheckBlocking(
       precheck(
         body(),
-        // The spot as stored, so 全場、整條路 rates are judged with its own
+        // The spot as stored, so 整個停車點、整條路 rates are judged with its own
         // time limit and who may park, as the server judges them (§4.3).
         current: {
           'fee': ?spot.fee?.toJson(),
@@ -714,10 +720,10 @@ class _FeeEditPageState extends State<FeeEditPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
-                Text('$wholeWord費率', style: muted),
+                Text(wholeFee, style: muted),
                 const SizedBox(height: 4),
                 Text(
-                  whole == '未提供' ? '$wholeWord未提供' : whole,
+                  whole == '未提供' ? (street ? '整條路未提供' : '$wholeFee未提供') : whole,
                   style: const TextStyle(
                     fontSize: 17,
                     height: 1.45,
@@ -858,7 +864,7 @@ class _FeeEditPageState extends State<FeeEditPage> {
           }),
           form: FeeFormStyle(
             original: adding ? null : start,
-            // 全場、整條路 send only the vehicles changed (feeProposal).
+            // 整個停車點、整條路 send only the vehicles changed (feeProposal).
             patch: !adding && d == null,
             why: d == null ? const {} : whyNotApplicable(d),
             closed: closedFor(

@@ -183,7 +183,7 @@ class SpotsController extends ChangeNotifier {
       'parking_zones': [
         ...zones,
         like == null
-            ? {'name': '新區域'}
+            ? {'name': '新分區'}
             // A second bay in the area rests on the area's notice too.
             : {
                 'name': like['name'],
@@ -866,7 +866,7 @@ class SpotsController extends ChangeNotifier {
       return '這個點有內容檢舉還沒處理完，請先處理檢舉再改為官方點。';
     }
     if (message.contains('invalid parking_zones')) {
-      return '區域與格位的資料不正確，尚未儲存。請檢查每個格位的可停車種。';
+      return '分區與格位的資料不正確，尚未儲存。請檢查每個格位的可停車種。';
     }
     return fallback;
   }
