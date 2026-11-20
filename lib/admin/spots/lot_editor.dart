@@ -458,26 +458,26 @@ class LotAreasSection extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Heading(
-              '區域與格位',
+              '分區與格位',
               changed: spots.changed('parking_zones'),
               action: OutlinedButton.icon(
                 key: const ValueKey('add-area'),
                 onPressed: spots.addZone,
                 icon: const Icon(Icons.add),
-                label: const Text('新增區域'),
+                label: const Text('新增分區'),
               ),
             ),
             const SizedBox(height: 4),
-            Text('同一區域有幾種格位，就加幾種格位；每種格位選它用的計費規則。', style: muted),
+            Text('同一分區有幾種格位，就加幾種格位；每種格位選它用的計費規則。', style: muted),
             SwitchListTile(
               key: const ValueKey('zones-complete'),
               contentPadding: EdgeInsets.zero,
               value: spots.draft['zones_complete'] == true,
               onChanged: (v) => spots.set('zones_complete', v),
               title: const Text('分區資料已涵蓋全場'),
-              subtitle: Text('開啟後，App 會把沒列出的區域當成不開放；不確定就保持關閉。', style: muted),
+              subtitle: Text('開啟後，App 會把沒列出的分區當成不開放；不確定就保持關閉。', style: muted),
             ),
-            if (cards.isEmpty) Text('還沒有區域。', style: muted),
+            if (cards.isEmpty) Text('還沒有分區。', style: muted),
             for (final (i, card) in cards.indexed)
               _AreaCard(
                 // A renamed card is the same card, so key by position; start
@@ -576,7 +576,7 @@ class _AreaCardState extends State<_AreaCard> {
             controller: name,
             maxLength: 40,
             decoration: const InputDecoration(
-              labelText: '區域名稱',
+              labelText: '分區名稱',
               counterText: '',
             ),
             onChanged: (v) => spots.setCard(card, name: v),

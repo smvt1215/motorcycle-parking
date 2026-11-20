@@ -922,15 +922,15 @@ void main() {
       testWidgets('$name：全區列與編輯頁，展開成各區的值送出', (tester) async {
         final store = await open(tester, lotOf('official'), size: size);
         await tapKey(tester, 'suggest-where');
-        expect(find.text('普機 可停，重機 不可停\n沒有另設的分區沿用全區'), findsOneWidget);
-        expect(find.text('沿用全區'), findsNWidgets(2));
+        expect(find.text('普機 可停，重機 不可停\n沒有另設的分區沿用整個停車點'), findsOneWidget);
+        expect(find.text('沿用整個停車點'), findsNWidgets(2));
         await tapKey(tester, 'entry-whole-row');
-        expect(find.text('全區'), findsOneWidget);
+        expect(find.text('整個停車點'), findsOneWidget);
         expect(find.text('官方未標示'), findsNWidgets(2));
         expect(find.text('這次會影響'), findsOneWidget);
         expect(find.byKey(const ValueKey('whole-overwrite')), findsNothing);
         await tapKey(tester, 'whole-heavy-allowed');
-        expect(find.text('沿用全區'), findsNWidgets(2));
+        expect(find.text('沿用整個停車點'), findsNWidgets(2));
         await tapSend(tester, '送出 2 項建議');
         final body = store.sent.single;
         expect(body['field'], 'zones');
@@ -957,7 +957,7 @@ void main() {
       final store = await open(tester, _lot);
       await tapKey(tester, 'suggest-where');
       expect(find.text('尚未設定，各區各自填\n一次設定普機、重機能不能停'), findsOneWidget);
-      expect(find.text('沿用全區'), findsNothing);
+      expect(find.text('沿用整個停車點'), findsNothing);
       await tapKey(tester, 'entry-whole-row');
       await tapKey(tester, 'whole-scooter-allowed');
       await tapKey(tester, 'whole-heavy-allowed');
@@ -970,9 +970,9 @@ void main() {
             .onPressed,
         isNull,
       );
-      expect(find.text('另設的 2 區也一起改成全區'), findsOneWidget);
+      expect(find.text('另設的 2 區也一起改成整個停車點'), findsOneWidget);
       await tapKey(tester, 'whole-overwrite');
-      expect(find.text('會一起改成全區'), findsOneWidget);
+      expect(find.text('會一起改成整個停車點'), findsOneWidget);
       // B2 is a heavy bay: scooters stay out.
       expect(find.text('會一起改，重機專用格普機不會改'), findsOneWidget);
       // B2 keeps scooters out and already says heavy: nothing changes there.
@@ -992,12 +992,12 @@ void main() {
       await tapKey(tester, 'suggest-where');
       await tapText(tester, 'B1 機車區');
       expect(find.byKey(const ValueKey('entry-follows-whole')), findsOneWidget);
-      expect(find.text('沿用全區：普機 可停，重機 不可停'), findsOneWidget);
+      expect(find.text('沿用整個停車點：普機 可停，重機 不可停'), findsOneWidget);
       expect(find.byKey(const ValueKey('entry-heavy-allowed')), findsNothing);
       await tapKey(tester, 'entry-set-apart');
       expect(find.byKey(const ValueKey('entry-heavy-allowed')), findsOneWidget);
       await tapKey(tester, 'entry-heavy-allowed');
-      expect(find.text('另設中，和全區不同'), findsOneWidget);
+      expect(find.text('另設中，和整個停車點不同'), findsOneWidget);
       await tapKey(tester, 'entry-back-to-whole');
       expect(find.byKey(const ValueKey('entry-follows-whole')), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -1094,11 +1094,11 @@ void main() {
       expect(find.text('普機 可停，重機 不可停\n新增的分區沿用這裡，也可以在該區另設'), findsOneWidget);
       await tester.tap(find.text('新增一區'));
       await tester.pumpAndSettle();
-      expect(find.text('沿用全區：普機 可停，重機 不可停'), findsOneWidget);
+      expect(find.text('沿用整個停車點：普機 可停，重機 不可停'), findsOneWidget);
       // A heavy bay cannot take 普機 可停: the vehicles show, already right.
       await tapKey(tester, 'bay-heavy');
       expect(find.byKey(const ValueKey('entry-follows-whole')), findsNothing);
-      expect(find.text('另設中，和全區不同'), findsOneWidget);
+      expect(find.text('另設中，和整個停車點不同'), findsOneWidget);
       expect(find.byKey(const ValueKey('entry-bay-problem')), findsNothing);
       expect(tester.takeException(), isNull);
     });

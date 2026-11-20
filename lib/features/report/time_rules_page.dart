@@ -80,8 +80,8 @@ class _TimeRulesPageState extends State<TimeRulesPage> {
   bool get adding => widget.spot == null;
   bool get zones => widget.type == EntryType.zone;
   String get unit => widget.type.unit;
-  String get allLabel => zones ? '整個停車場' : '整條路';
-  String get allWord => zones ? '全場' : '整條路';
+  String get allLabel => zones ? '整個停車點' : '整條路';
+  String get allWord => zones ? '整個停車點' : '整條路';
   List<EntryDraft> get drafts => widget.drafts;
 
   /// A street spot without segments carries its own condition.

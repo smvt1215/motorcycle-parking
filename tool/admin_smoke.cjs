@@ -491,7 +491,7 @@ function session(role, aal, factors = [factor]) {
             const size = mobile ? { width: 402, height: 874 } : { width: 820, height: 1180 };
             await page.setViewportSize(size);
             await page.waitForTimeout(500);
-            const areas = page.getByText('區域與格位', { exact: true });
+            const areas = page.getByText('分區與格位', { exact: true });
             await page.mouse.move(size.width * (mobile ? 0.5 : 0.75), size.height * 0.5);
             const inView = async () => {
               const at = (await areas.count()) ? await areas.first().boundingBox() : null;

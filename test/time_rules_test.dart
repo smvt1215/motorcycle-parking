@@ -41,24 +41,24 @@ void main() {
     ];
   });
 
-  test('各區相同的時段讀成一條規定，全部都有時管全場', () {
+  test('各區相同的時段讀成一條規定，全部都有時管整個停車點', () {
     final rules = rulesOf(drafts);
     expect(rules, hasLength(2));
     final limit = rules.firstWhere((r) => r.kind == RuleKind.limit);
     expect(limit.all, isTrue);
     expect(limit.minutes, 120);
     expect(
-      ruleSummary(limit, drafts, '全場'),
-      '全場　平日 07:00–20:00 每次限停 2 小時・可延長 1 次',
+      ruleSummary(limit, drafts, '整個停車點'),
+      '整個停車點　平日 07:00–20:00 每次限停 2 小時・可延長 1 次',
     );
     final night = rules.firstWhere((r) => r.kind == RuleKind.noParking);
     expect(night.all, isFalse);
-    expect(ruleSummary(night, drafts, '全場'), 'B1　每天 23:00–07:00');
+    expect(ruleSummary(night, drafts, '整個停車點'), 'B1　每天 23:00–07:00');
   });
 
   test('沒動的規定不產生 patch，也沒有差異', () {
     final rules = rulesOf(drafts);
-    expect(ruleChanges(rules, drafts, '全場'), isEmpty);
+    expect(ruleChanges(rules, drafts, '整個停車點'), isEmpty);
     applyRules(rules, drafts);
     expect(entriesPatchOf(drafts), isEmpty);
   });
@@ -66,7 +66,7 @@ void main() {
   test('改時長：複製到每個分區，差異只列改到的部分', () {
     final rules = rulesOf(drafts);
     rules.firstWhere((r) => r.kind == RuleKind.limit).minutes = 180;
-    final lines = ruleChanges(rules, drafts, '全場');
+    final lines = ruleChanges(rules, drafts, '整個停車點');
     expect(lines, hasLength(1));
     expect(lines.single.label, '限時');
     expect(lines.single.from, '每次限停 2 小時・可延長 1 次');
@@ -141,10 +141,10 @@ void main() {
         ..to = '23:00'
         ..vehicles = {SlotVehicle.scooter, SlotVehicle.heavy},
     );
-    final lines = ruleChanges(rules, drafts, '全場');
+    final lines = ruleChanges(rules, drafts, '整個停車點');
     expect(lines.map((l) => l.label), ['禁停', '共用']);
     expect(lines.first.to, '沒有');
-    expect(lines.last.to, '全場　每天 20:00–23:00 開放機車');
+    expect(lines.last.to, '整個停車點　每天 20:00–23:00 開放機車');
     applyRules(rules, drafts);
     final c =
         entriesPatchOf(drafts).first['condition']! as Map<String, Object?>;
@@ -170,12 +170,12 @@ void main() {
         ..minutes = 120
         ..extensions = 1,
     );
-    expect(ruleChanges(rules, drafts, '全場'), isEmpty);
+    expect(ruleChanges(rules, drafts, '整個停車點'), isEmpty);
     applyRules(rules, drafts);
     expect(entriesPatchOf(drafts), isEmpty);
   });
 
-  test('只有一區時點選該區等於全場，沒有差異', () {
+  test('只有一區時點選該區等於整個停車點，沒有差異', () {
     final one = [
       EntryDraft.ofZone(_zone('b1', [_limit])),
     ];
@@ -183,7 +183,7 @@ void main() {
     rules.single
       ..all = false
       ..scope = {one.single.token};
-    expect(ruleChanges(rules, one, '全場'), isEmpty);
+    expect(ruleChanges(rules, one, '整個停車點'), isEmpty);
     expect(rules.single.all, isTrue);
   });
 

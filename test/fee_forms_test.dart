@@ -1286,7 +1286,56 @@ void main() {
         ),
       );
       expect(find.text('先新增分區'), findsOneWidget);
+      expect(find.text(rulesNeedZoneNote), findsOneWidget);
+      expect(find.text('入口、分區與格位、可停車種'), findsOneWidget);
+      await tester.tap(find.byKey(const ValueKey('suggest-limits')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TimeRulesPage), findsNothing);
     });
+
+    testWidgets('TDX 路外點沒有可改的分區：限時列停用，不指引新增分區', (tester) async {
+      await pump(
+        tester,
+        const ParkingSpot(
+          id: 'tdx:lot',
+          name: '交通部停車場',
+          lat: 25,
+          lng: 121,
+          city: '臺北市',
+          spaceType: SpaceType.offStreet,
+          source: 'tdx',
+        ),
+      );
+      expect(find.text('目前不能提'), findsOneWidget);
+      expect(find.text(rulesClosedNote), findsOneWidget);
+      expect(find.text('先新增分區'), findsNothing);
+      expect(find.text(rulesNeedZoneNote), findsNothing);
+      await tester.tap(find.byKey(const ValueKey('suggest-limits')));
+      await tester.pumpAndSettle();
+      expect(find.byType(TimeRulesPage), findsNothing);
+    });
+
+    for (final (width, scale) in const [(320.0, 1.6), (390.0, 1.0)]) {
+      testWidgets('限時停用列在 $width 寬 $scale 倍不溢出', (tester) async {
+        for (final source in ['official', 'tdx']) {
+          await pump(
+            tester,
+            ParkingSpot(
+              id: '$source:lot',
+              name: '空',
+              lat: 25,
+              lng: 121,
+              city: '臺北市',
+              spaceType: SpaceType.offStreet,
+              source: source,
+            ),
+            width: width,
+            scale: scale,
+          );
+          expect(tester.takeException(), isNull);
+        }
+      });
+    }
 
     for (final platform in [TargetPlatform.android, TargetPlatform.iOS]) {
       for (final (width, scale) in const [
