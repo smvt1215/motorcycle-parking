@@ -1070,7 +1070,7 @@ void main() {
   });
 
   group('交叉審查修正（#222）', () {
-    test('分區只有費率、沒有開放資料：路牌用分區費率，與 spotFeeSummary 一致', () {
+    test('分區只有費率、沒有開放資料：路牌用分區費率，與詳情費率卡一致', () {
       final spot = ParkingSpot.fromJson({
         ...lotJson,
         'parking_zones': [

@@ -20,6 +20,7 @@ import '../../models/sighting.dart';
 import '../../ui/adaptive/adaptive.dart';
 import '../../ui/detail_tokens.dart';
 import '../../ui/four_sign_plates.dart';
+import '../../ui/minute_ticker.dart';
 
 import 'package:flutter/rendering.dart'
     show RenderAbstractViewport, RenderProxyBox;
@@ -36,7 +37,6 @@ import '../report/spot_suggestions.dart';
 import '../sighting/sighting_sheet.dart';
 import 'closure_card.dart';
 import 'spot_details.dart';
-import 'spot_fees.dart';
 import 'spot_photos.dart';
 import 'spot_preview.dart';
 import 'spot_detail.dart';

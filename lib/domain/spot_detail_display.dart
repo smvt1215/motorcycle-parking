@@ -808,7 +808,7 @@ DetailPrice placePrice(ParkingSpot spot, SignArea a, VehicleType vehicle) {
 }
 
 /// A zone's old text price for [vehicle], kept to that vehicle (as
-/// spot_fees.dart's `_zoneLegacy`): with any per-vehicle text, a vehicle
+/// four_sign.dart's `_zoneLegacy`): with any per-vehicle text, a vehicle
 /// without its own reads 未提供, never the zone's general note; the
 /// general note stands only when no vehicle has its own, and never when it
 /// repeats the car's. Null when the zone states nothing at all.

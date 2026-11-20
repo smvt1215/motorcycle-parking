@@ -1,10 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:motorcycle_parking/features/map/spot_fees.dart';
-import 'package:motorcycle_parking/features/map/spot_details.dart';
 import 'package:motorcycle_parking/models/fee.dart';
 import 'package:motorcycle_parking/models/parking.dart';
-import 'package:motorcycle_parking/ui/adaptive/adaptive.dart';
 
 ParkingSpot lot({Fee? fee, List<ParkingZone> zones = const []}) => ParkingSpot(
   id: 'zone-fees',
@@ -77,301 +74,49 @@ void main() {
     // a zone's explicit empty fee still keeps its legacy strings out.
     expect(spot.fee, isNull);
     expect(spot.zones.single.fee, const Fee());
-    expect(spotFeeSummary(spot, VehicleType.heavy), '費率未確認');
     expect(spot.zones.single.heavyFeeText, '');
     expect(spot.toJson()['fee'], isNull);
     expect(
       (spot.toJson()['parking_zones'] as List).single['fee'],
       <String, Object>{},
     );
-    expect(spotFeeSummary(lot(fee: const Fee()), VehicleType.scooter), '費率未確認');
   });
 
-  test('點位有結構化費率而分區只有舊文字時，以點位費率為準', () {
-    const fee = Fee(scooter: Rate(FeeMode.free));
-    const legacy = ParkingZone(name: 'B2', feeNote: '舊：每次 10 元');
-    final single = lot(fee: fee, zones: [legacy]);
-    expect(spotFeeSummary(single, VehicleType.scooter), '免費');
-    expect(spotFeeSummary(single, VehicleType.heavy), '費率未確認');
-    expect(spotFeeIsVehicleRate(single), isTrue);
-    expect(lotWideFee(single), fee);
-    final multi = lot(fee: fee, zones: [legacy, legacy]);
-    expect(spotFeeSummary(multi, VehicleType.scooter), '免費');
-    // A zone's own structured rate still wins over the lot's.
-    const own = ParkingZone(name: 'B1', fee: Fee());
-    expect(lotWideFee(lot(fee: fee, zones: [own, legacy])), isNull);
-    expect(
-      spotFeeSummary(lot(fee: fee, zones: [own]), VehicleType.scooter),
-      '費率未確認',
-    );
-  });
-
-  test('單一分區顯示實際費率，多分區逐區計費，未知車種不繼承其他費率', () {
+  test('分區有結構化費率而未填某車種時，該車種不退回舊文字', () {
     const partial = ParkingZone(
       name: 'B2',
       access: ParkingAccess.scooterHeavy,
       heavyFeeNote: '舊重機每次 50 元，隔日另計',
       fee: Fee(scooter: Rate(FeeMode.free)),
     );
-    expect(spotFeeSummary(lot(zones: [partial]), VehicleType.scooter), '免費');
-    expect(
-      spotFeeSummary(
-        lot(
-          fee: const Fee(
-            heavy: Rate(FeeMode.perVisit, amount: 90, renew: Renew.midnight),
-          ),
-          zones: [partial],
-        ),
-        VehicleType.heavy,
-      ),
-      '費率未確認',
-    );
     expect(partial.heavyFeeText, '');
-    expect(
-      spotFeeSummary(
-        lot(
-          zones: [
-            partial,
-            const ParkingZone(name: '1F', feeNote: '每次 30 元'),
-          ],
-        ),
-        VehicleType.scooter,
-      ),
-      '依分區計費',
-    );
-    expect(
-      spotFeeSummary(
-        lot(
-          zones: const [ParkingZone(name: '舊區', feeNote: '免費')],
-        ),
-        VehicleType.heavy,
-      ),
-      '免費',
-    );
-    expect(
-      spotFeeSummary(
-        lot(fee: const Fee(heavy: Rate(FeeMode.sameAsCar))),
-        VehicleType.heavy,
-      ),
-      '費率未提供',
-    );
-    // A follow shows the amounts it works out to (#140).
-    expect(
-      spotFeeSummary(
-        lot(
-          fee: const Fee(
-            scooter: Rate(FeeMode.hourly, amount: 20, perMinutes: 60),
-            heavy: Rate(FeeMode.sameAsScooter),
-          ),
-        ),
-        VehicleType.heavy,
-      ),
-      '每小時 20 元',
-    );
-    expect(
-      spotFeeSummary(
-        lot(fee: const Fee(heavy: Rate(FeeMode.sameAsCar))),
-        VehicleType.scooter,
-      ),
-      '費率未確認',
-    );
   });
 
-  Future<void> pumpFees(
-    WidgetTester tester,
-    double width,
-    ParkingSpot spot, {
-    double scale = 1,
-    Brightness brightness = Brightness.light,
-    VehicleType vehicle = VehicleType.scooter,
-  }) {
-    tester.view.devicePixelRatio = 1;
-    tester.view.physicalSize = Size(width, 1100);
-    addTearDown(tester.view.resetPhysicalSize);
-    addTearDown(tester.view.resetDevicePixelRatio);
-    return tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(brightness: brightness),
-        builder: (context, child) => MediaQuery(
-          data: MediaQuery.of(context)
-              .copyWith(textScaler: TextScaler.linear(scale)),
-          child: child!,
+  test('共用格不同車種費率在點位序列化往返後完整保留，舊資料不產生費率', () {
+    final original = lot(
+      zones: const [
+        ParkingZone(
+          name: '共用車格',
+          access: ParkingAccess.scooterHeavy,
+          scooterFeeNote: '20 元／次',
+          heavyFeeNote: '30 元／小時',
         ),
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: SpotFees(spot: spot, vehicle: vehicle),
-            ),
-          ),
-        ),
-      ),
+      ],
     );
-  }
-
-  for (final width in [320.0, 360.0, 390.0, 700.0, 1280.0]) {
-    testWidgets('分區公告牌在寬 $width、深色放大字級下完整顯示', (tester) async {
-      await pumpFees(
-        tester,
-        width,
-        lot(
-          zones: const [
-            ParkingZone(
-              name: 'B2',
-              access: ParkingAccess.scooterHeavy,
-              feeNote: '不應重複的舊費率',
-              fee: Fee(
-                scooter: Rate(FeeMode.free),
-                heavy: Rate(
-                  FeeMode.hourly,
-                  amount: 20,
-                  perMinutes: 30,
-                  dailyCap: 100,
-                ),
-              ),
-            ),
-          ],
-        ),
-        scale: 1.6,
-        brightness: Brightness.dark,
-      );
-      expect(find.text('B2'), findsOneWidget);
-      expect(find.text('免費'), findsOneWidget);
-      expect(find.text('每 30 分鐘 20 元'), findsOneWidget);
-      // An old cap without its reset says nothing of it (Un-1).
-      expect(find.textContaining('上限計算方式未確認'), findsNothing);
-      expect(find.textContaining('不應重複'), findsNothing);
-      expect(tester.takeException(), isNull);
+    final restored = ParkingSpot.fromJson(original.toJson());
+    expect(restored.zones.single.access, ParkingAccess.scooterHeavy);
+    expect(restored.zones.single.scooterFeeNote, '20 元／次');
+    expect(restored.zones.single.heavyFeeNote, '30 元／小時');
+    final legacy = ParkingZone.fromJson({'name': '舊分區', 'fee_note': '請依現場公告'});
+    expect(legacy.scooterFeeNote, isEmpty);
+    expect(legacy.heavyFeeNote, isEmpty);
+    final malformed = ParkingZone.fromJson({
+      'name': '未確認費率',
+      'scooter_fee_note': 20,
+      'heavy_fee_note': {'price': 30},
     });
-  }
-
-  for (final width in [320.0, 390.0]) {
-    testWidgets('寬 $width：部分分區有費率時逐區顯示，沒有 fee 的分區照舊文字', (tester) async {
-      final spot = lot(
-        fee: const Fee(scooter: Rate(FeeMode.perVisit, amount: 20)),
-        zones: const [
-          ParkingZone(
-            name: 'B1',
-            access: ParkingAccess.scooterOnly,
-            fee: Fee(scooter: Rate(FeeMode.free)),
-          ),
-          ParkingZone(
-            name: 'B2',
-            access: ParkingAccess.scooterOnly,
-            feeNote: '舊 B2 每次 10 元',
-          ),
-        ],
-      );
-      expect(spotFeeSummary(spot, VehicleType.scooter), '依分區計費');
-      await pumpFees(tester, width, spot);
-      expect(find.text('全場'), findsNothing);
-      expect(find.text('B1'), findsOneWidget);
-      expect(find.text('免費'), findsOneWidget);
-      expect(find.text('舊 B2 每次 10 元'), findsOneWidget);
-      expect(find.textContaining('每次 20 元'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('寬 $width：全場費率只列一次，分區的舊汽車文字不再顯示（決定 45）', (tester) async {
-      final spot = lot(
-        fee: const Fee(heavy: Rate(FeeMode.sameAsCar)),
-        zones: const [
-          ParkingZone(
-            name: '1F',
-            access: ParkingAccess.heavyCar,
-            heavyFeeNote: '舊重機費率',
-            carFeeNote: '每小時 30 元',
-          ),
-        ],
-      );
-      await pumpFees(
-        tester,
-        width,
-        spot,
-        vehicle: VehicleType.heavy,
-        scale: 1.6,
-        brightness: Brightness.dark,
-      );
-      expect(find.text('全場'), findsOneWidget);
-      expect(find.text('1F'), findsNothing);
-      expect(find.textContaining('每小時 30 元'), findsNothing);
-      // The lot has car bays but no structured car rate.
-      expect(find.text('汽車'), findsOneWidget);
-      // Decision 54: 費率未確認 on the car's line, the posted notice once.
-      expect(find.textContaining('費率未確認'), findsOneWidget);
-      expect(find.text('未確認的費率請依現場公告'), findsOneWidget);
-      // 比照 resolves within the same fee only (design §2.1), so the heavy
-      // rate is not provided (#140).
-      expect(find.textContaining('費率未提供'), findsOneWidget);
-      expect(find.textContaining('舊重機'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('寬 $width：沒有任何結構化費率的分區，汽車也寫未確認（決定 45）', (tester) async {
-      final spot = lot(
-        zones: const [
-          ParkingZone(
-            name: '1F',
-            access: ParkingAccess.heavyCar,
-            heavyFeeNote: '每次 40 元',
-            carFeeNote: '每小時 30 元',
-          ),
-        ],
-      );
-      await pumpFees(
-        tester,
-        width,
-        spot,
-        vehicle: VehicleType.heavy,
-        scale: 1.6,
-        brightness: Brightness.dark,
-      );
-      expect(find.text('每次 40 元'), findsOneWidget);
-      expect(find.textContaining('每小時 30 元'), findsNothing);
-      // Decision 54: 費率未確認 on the car's line, the posted notice once.
-      expect(find.textContaining('費率未確認'), findsOneWidget);
-      expect(find.text('未確認的費率請依現場公告'), findsOneWidget);
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('寬 $width：全場與分區都有結構化汽車費率時各自顯示', (tester) async {
-      final spot = lot(
-        zones: const [
-          ParkingZone(
-            name: '汽車區',
-            access: ParkingAccess.heavyCar,
-            carFeeNote: '每小時 99 元',
-            fee: Fee(car: Rate(FeeMode.hourly, amount: 40, perMinutes: 60)),
-          ),
-        ],
-      );
-      await pumpFees(tester, width, spot, vehicle: VehicleType.heavy);
-      expect(find.text('每小時 40 元'), findsOneWidget);
-      expect(find.textContaining('每小時 99 元'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-  }
-
-  for (final width in [320.0, 390.0, 700.0, 1280.0]) {
-    testWidgets('寬 $width：公告牌寫算好的金額與汽車費率，不寫比照（#140）', (tester) async {
-      final spot = lot(
-        fee: const Fee(
-          scooter: Rate(FeeMode.hourly, amount: 10, perMinutes: 60),
-          heavy: Rate(FeeMode.sameAsScooter),
-          car: Rate(FeeMode.hourly, amount: 40, perMinutes: 60),
-        ),
-        zones: const [
-          ParkingZone(name: '機車區', access: ParkingAccess.scooterHeavy),
-        ],
-      );
-      // No factor since #188 layer 2: the scooter's own rate.
-      expect(spotFeeSummary(spot, VehicleType.heavy), '每小時 10 元');
-      await pumpFees(tester, width, spot);
-      expect(find.text('每小時 10 元'), findsNWidgets(2));
-      // The lot's car rate is listed once, not again in every zone.
-      expect(find.text('每小時 40 元'), findsOneWidget);
-      expect(find.textContaining('比照'), findsNothing);
-      expect(tester.takeException(), isNull);
-    });
-  }
+    expect(malformed.scooterFeeNote, isEmpty);
+    expect(malformed.heavyFeeNote, isEmpty);
+    expect(legacy.toJson(), {'name': '舊分區', 'fee_note': '請依現場公告'});
+  });
 }
