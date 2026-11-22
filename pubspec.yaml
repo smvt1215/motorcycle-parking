@@ -10,11 +10,11 @@ dependencies:
     sdk: flutter
   flutter_localizations:
     sdk: flutter
-  material_ui: 1.11.0
-  cupertino_ui: 1.1.6
+  material_ui: 1.11.1
+  cupertino_ui: 1.1.7
   cupertino_icons: ^2.0.0
   cupertino_native_better: 1.7.0
-  material_3_expressive: 1.2.1
+  material_3_expressive: 1.2.2
   dynamic_color: ^2.1.0
   google_maps_flutter: 2.19.0
   google_maps_flutter_ios_sdk9: 2.19.0
@@ -36,8 +36,8 @@ dependencies:
   timezone: ^0.11.2
   package_info_plus: ^10.2.2
   path_provider: ^2.1.6
-  firebase_core: ^5.1.0
-  firebase_app_check: ^0.5.1
+  firebase_core: ^5.2.0
+  firebase_app_check: ^0.5.2
   google_sign_in: ^7.2.0
   sign_in_with_apple: ^8.2.0
   crypto: ^3.0.8
